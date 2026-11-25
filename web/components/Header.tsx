@@ -20,7 +20,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-bg/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-4">
-        <Link href="/" aria-label="GachaForge home" className="min-w-0 shrink-0"><Wordmark /></Link>
+        <Link href="/" aria-label="GachaForge home" className="min-w-0 shrink-0"><Wordmark textClass="max-[359px]:hidden" /></Link>
         <nav className="ml-6 hidden items-center gap-1 lg:flex">
           {NAV.map((n) => (
             <Link key={n.k} href={n.href} className={`rounded-md px-3 py-2 font-display text-sm font-semibold uppercase tracking-wide transition hover:bg-surface hover:text-fg ${n.k === 'nav_forge' ? 'text-accent' : 'text-muted'}`}>
@@ -36,7 +36,7 @@ export function Header() {
               </button>
             ))}
           </div>
-          <a href="https://x.com/" target="_blank" rel="noreferrer" aria-label="X" className="hidden h-8 w-8 place-items-center rounded-md border border-line text-muted transition hover:text-fg sm:grid">
+          <a href="https://x.com/Gachaforge" target="_blank" rel="noreferrer" aria-label="GachaForge on X" className="hidden h-8 w-8 place-items-center rounded-md border border-line text-muted transition hover:text-fg sm:grid">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.8 3h3.1l-6.8 7.7L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.2-8.3L2 3h6.4l4.4 5.8L17.8 3Zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5Z" /></svg>
           </a>
           <WalletButton label={t('connect')} />
@@ -56,6 +56,7 @@ export function Header() {
                 {l === 'en' ? 'EN' : '中文'}
               </button>
             ))}
+            <a href="https://x.com/Gachaforge" target="_blank" rel="noreferrer" className="ml-auto rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-muted hover:text-fg">X · @Gachaforge</a>
           </div>
         </nav>
       )}

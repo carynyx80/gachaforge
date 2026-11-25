@@ -31,11 +31,19 @@ describe('API', () => {
     expect(Object.keys(body).sort()).toEqual(['burnedUsd', 'cardsAwarded', 'launches', 'packsOpened', 'potsUsd']);
     expect(body.launches).toBe(19);
   });
-  it('every machine has the fixed 2% tax', async () => {
+  it('every machine exposes its v3 tax (1–10% buy/sell, pot share 20–100%)', async () => {
     const { body } = await get('/api/machines?pageSize=100');
-    const items = (body.items ?? body) as { taxBps: number }[];
+    const items = (body.items ?? body) as { taxBps: number; buyTaxBps: number; sellTaxBps: number; potShareBps: number; creatorPayout: string; creatorOwedBnb: number; creatorPaidBnb: number }[];
     expect(items.length).toBeGreaterThan(0);
-    for (const m of items) expect(m.taxBps).toBe(200);
+    for (const m of items) {
+      for (const t of [m.buyTaxBps, m.sellTaxBps]) expect(t >= 100 && t <= 1000 && t % 100 === 0).toBe(true);
+      expect(m.taxBps).toBe(m.buyTaxBps);
+      expect(m.potShareBps >= 2000 && m.potShareBps <= 10_000).toBe(true);
+      expect(m.creatorPayout).toMatch(/^0x[0-9a-f]{40}$/);
+      expect(typeof m.creatorOwedBnb + typeof m.creatorPaidBnb).toBe('numbernumber');
+    }
+    expect(new Set(items.map((m) => m.buyTaxBps)).size).toBeGreaterThan(3);
+    expect(new Set(items.map((m) => m.potShareBps)).size).toBeGreaterThan(3);
   });
   it('CORS for the frontend origin', async () => {
     const r = await app.inject({ method: 'GET', url: '/api/stats', headers: { origin: 'http://localhost:3000' } });

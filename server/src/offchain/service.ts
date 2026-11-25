@@ -33,9 +33,28 @@ export interface Transparency {
   treasury: { address: string; balanceBnb: number; url: string };
   ops: { address: string | null; balanceBnb: number; url: string | null; ready: boolean; paused: boolean; sameAsTreasury: boolean; dailyCapBnb: number; spent24hBnb: number };
   balances: { treasuryBnb: number; opsBnb: number; payingWalletBnb: number; coverageBnb: number };
-  owed: { pots: number; buyback: number; dividendsPending: number; burnsPending: number; total: number };
-  ledger: { taxBnb: number; flapBnb: number; platformBnb: number; potsBnb: number; buybackBnb: number; treasuryShareBps: number; measured: boolean };
-  machines: { address: string; ticker: string; potBnb: number; potUsd: number; taxBnb: number; dividendsPendingBnb: number; burnsPendingBnb: number; pullQueued: boolean; pullQueuedReason: string | null; openPull: unknown }[];
+  owed: { pots: number; creators: number; buyback: number; dividendsPending: number; burnsPending: number; total: number };
+  ledger: { taxBnb: number; flapBnb: number; platformBnb: number; potsBnb: number; buybackBnb: number; creatorsBnb: number; creatorsPaidBnb: number; treasuryShareBps: number; measured: boolean };
+  machines: {
+    address: string;
+    ticker: string;
+    taxModel: string;
+    buyTaxBps: number | null;
+    sellTaxBps: number | null;
+    potShareBps: number | null;
+    creatorPayout: string | null;
+    creatorOwedBnb: number;
+    creatorPaidBnb: number;
+    treasuryShareBps: number;
+    potBnb: number;
+    potUsd: number;
+    taxBnb: number;
+    dividendsPendingBnb: number;
+    burnsPendingBnb: number;
+    pullQueued: boolean;
+    pullQueuedReason: string | null;
+    openPull: unknown;
+  }[];
   txs: { id: string; kind: string; label: string | null; machine: string | null; to: string | null; amountBnb: number; feeBnb: number; hash: string | null; url: string | null; status: string; error: string | null; timestamp: number }[];
   updatedAt: number;
 }
@@ -132,6 +151,9 @@ export class OffchainService implements OffchainApi {
         forgeDeployer: process.env.FORGE_DEPLOYER || undefined,
         ipfsGateway: process.env.FORGE_IPFS_GATEWAY || FLAP_IPFS_GATEWAY,
         renaissReady: this.renaissReady,
+        creatorPayoutMinWei: wei(cfg.CREATOR_PAYOUT_MIN_BNB),
+        forgePack: cfg.FORGE_PACK,
+        forgeStrategy: cfg.FORGE_STRATEGY,
       },
       store: d.store,
       accounts: this.accounts,
@@ -142,6 +164,7 @@ export class OffchainService implements OffchainApi {
       indexer: this.indexer,
       bnbUsd: () => this.bnbUsd(),
       forgeToken: () => this.forgeToken(),
+      forgeInfo: () => this.forgeInfo(),
       log: d.log,
       now: d.now,
       fetch: d.fetch,
@@ -188,6 +211,12 @@ export class OffchainService implements OffchainApi {
     return s.status === 'live' && !s.preview && s.token ? s.token.address : null;
   }
 
+  private async forgeInfo() {
+    if (!this.d.forge) return null;
+    const s = await this.d.forge.status();
+    return s.status === 'live' && !s.preview && s.token ? s.token : null;
+  }
+
   private async balanceOf(address: string | null): Promise<bigint> {
     if (!address) return 0n;
     const hit = this.balCache.get(address.toLowerCase());
@@ -201,13 +230,15 @@ export class OffchainService implements OffchainApi {
   async transparency(): Promise<Transparency> {
     const cfg = this.d.cfg;
     const sum = (b: Bucket) => this.accounts.balance(b);
-    const [owed, tax, flap, platform, pots, buyback, share, measured, txs, spent, regs, treasuryBal, opsBal] = await Promise.all([
+    const [owed, tax, flap, platform, pots, buyback, creators, creatorsPaid, share, measured, txs, spent, regs, treasuryBal, opsBal] = await Promise.all([
       this.accounts.owed(),
       sum('TAX'),
       sum('FLAP'),
       sum('PLATFORM'),
       sum('POT'),
       sum('BUYBACK'),
+      sum('CREATOR'),
+      this.store.sum({ bucket: 'CREATOR', kind: 'CREATOR_PAID' }),
       this.accounts.shareBps(),
       this.accounts.measured(),
       this.store.listOpsTxs({ limit: 200 }),
@@ -224,9 +255,18 @@ export class OffchainService implements OffchainApi {
       regs.map(async (r) => {
         const m = await this.d.ledger.repo.getMachine(r.token);
         const pot = potBy.get(r.token) ?? 0n;
+        const cf = await this.accounts.creatorFields(r.token);
         return {
           address: r.token,
           ticker: m?.ticker ?? '',
+          taxModel: r.taxModel ?? 'legacy',
+          buyTaxBps: r.buyTaxBps ?? m?.taxBps ?? null,
+          sellTaxBps: r.sellTaxBps ?? m?.taxBps ?? null,
+          potShareBps: r.potShareBps ?? null,
+          creatorPayout: r.payout ?? null,
+          creatorOwedBnb: cf.creatorOwedBnb ?? 0,
+          creatorPaidBnb: cf.creatorPaidBnb ?? 0,
+          treasuryShareBps: await this.accounts.shareBps(r),
           potBnb: r6(weiToBnb(pot)),
           potUsd: Math.round(weiToBnb(pot) * bnbUsd * 100) / 100,
           taxBnb: r6(weiToBnb(taxBy.get(r.token) ?? 0n)),
@@ -253,8 +293,8 @@ export class OffchainService implements OffchainApi {
         spent24hBnb: r6(weiToBnb(spent)),
       },
       balances: { treasuryBnb: r6(weiToBnb(treasuryBal)), opsBnb: r6(weiToBnb(opsBal)), payingWalletBnb: r6(weiToBnb(paying)), coverageBnb: r6(weiToBnb(paying - owed.total)) },
-      owed: { pots: r6(weiToBnb(owed.pots)), buyback: r6(weiToBnb(owed.buyback)), dividendsPending: r6(weiToBnb(owed.dividendsPending)), burnsPending: r6(weiToBnb(owed.burnsPending)), total: r6(weiToBnb(owed.total)) },
-      ledger: { taxBnb: r6(weiToBnb(tax)), flapBnb: r6(weiToBnb(flap)), platformBnb: r6(weiToBnb(platform)), potsBnb: r6(weiToBnb(pots)), buybackBnb: r6(weiToBnb(buyback)), treasuryShareBps: share, measured: !!measured && measured.grossWei > 0n },
+      owed: { pots: r6(weiToBnb(owed.pots)), creators: r6(weiToBnb(owed.creators)), buyback: r6(weiToBnb(owed.buyback)), dividendsPending: r6(weiToBnb(owed.dividendsPending)), burnsPending: r6(weiToBnb(owed.burnsPending)), total: r6(weiToBnb(owed.total)) },
+      ledger: { taxBnb: r6(weiToBnb(tax)), flapBnb: r6(weiToBnb(flap)), platformBnb: r6(weiToBnb(platform)), potsBnb: r6(weiToBnb(pots)), buybackBnb: r6(weiToBnb(buyback)), creatorsBnb: r6(weiToBnb(creators)), creatorsPaidBnb: r6(weiToBnb(-creatorsPaid)), treasuryShareBps: share, measured: !!measured && measured.grossWei > 0n },
       machines,
       txs: txs.map((t) => ({
         id: t.id,
@@ -310,7 +350,9 @@ export class OffchainService implements OffchainApi {
       await this.engine.tickDispatch();
       await this.engine.tickReconcile();
       await this.engine.tickAutoRegister();
+      await this.engine.tickForgeRegister();
     });
+    this.loop('creator-payouts', cfg.CREATOR_PAYOUT_INTERVAL_MS, () => this.engine.tickCreatorPayouts());
     if (cfg.SWEEP_TO_ADDRESS) this.loop('sweep', cfg.SWEEP_INTERVAL_MS, () => this.engine.tickSweep());
     if (this.provider && this.ops.ready) {
       this.release = new ReleaseJob(this.d.ledger, this.provider, this.d.log, { intervalMs: cfg.RELEASE_POLL_MS });

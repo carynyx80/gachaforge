@@ -7,6 +7,7 @@ import { useT } from './LangProvider';
 import { MachineArt } from './MachineArt';
 import { SectionTitle } from './Scoreboard';
 import type { DictKey } from '@/lib/i18n';
+import { machineTax } from '@/lib/economics';
 
 const TABS: { v: MachineSort; k: DictKey }[] = [
   { v: 'trending', k: 't_trending' }, { v: 'new', k: 't_new' }, { v: 'most_pulled', k: 't_most' }, { v: 'market_cap', k: 't_mcap' },
@@ -76,6 +77,7 @@ function MachineCard({ m }: { m: Machine }) {
   const potPct = Math.min(100, (m.potUsd / m.packPriceUsd) * 100);
   const toRip = Math.max(0, m.packPriceUsd - m.potUsd);
   const up = m.change24hPct >= 0;
+  const tax = machineTax(m);
   return (
     <a href={`/m/${m.address}`} className="panel group flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-[0_8px_30px_-10px_#B6FF2E66]">
       <div className="relative">
@@ -91,7 +93,11 @@ function MachineCard({ m }: { m: Machine }) {
             <span className="truncate font-semibold">{m.name}</span>
             <span className="font-display font-bold text-glow">${m.ticker}</span>
           </div>
-          <div className="text-xs text-muted">{t(`st_${m.strategy}`)} · {m.taxBps / 100}% {t('tax')}</div>
+          <div className="flex min-w-0 flex-wrap gap-x-1.5 text-xs text-muted">
+            <span>{t(`st_${m.strategy}`)}</span><span aria-hidden>·</span>
+            <span className="font-mono text-fg/90">{tax.buyPct}% / {tax.sellPct}%</span><span>{t('tax')}</span><span aria-hidden>·</span>
+            <span><span className="font-mono text-accent">{tax.potSharePct}%</span> {t('pot_share')}</span>
+          </div>
         </div>
         <div>
           <div className="mb-1 flex justify-between text-[11px] text-muted"><span>{t('curve')}</span><span className="font-mono">{m.bondingCurvePct}%</span></div>

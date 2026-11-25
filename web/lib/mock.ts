@@ -1,5 +1,4 @@
 import type { ActivityEvent, BurnEvent, Machine, PackId, Pull, Stats, Strategy, Trade } from './types';
-import { TAX_BPS } from './economics';
 import { PACK_PRICE } from './types';
 
 // Deterministic PRNG so server and client render identical mock data.
@@ -48,7 +47,12 @@ export const mockMachines: Machine[] = NAMES.map(([name, ticker], i) => {
     pack,
     packPriceUsd: PACK_PRICE[pack],
     strategy,
-    taxBps: TAX_BPS,
+    taxBps: (1 + (i * 3) % 10) * 100,
+    buyTaxBps: (1 + (i * 3) % 10) * 100,
+    sellTaxBps: (1 + (i * 7 + 2) % 10) * 100,
+    potShareBps: [2000, 5000, 8000, 10000, 3500][i % 5],
+    creatorPaidBnb: Math.round(r() * 300) / 100,
+    creatorOwedBnb: Math.round(r() * 100) / 10000,
     split: strategy === 'SPLIT' ? { dividendBps: 5000, burnBps: 3000, lpBps: 2000 } : undefined,
     stage,
     bondingCurvePct,

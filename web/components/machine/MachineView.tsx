@@ -10,6 +10,8 @@ import { LivePot } from '../live/LivePot';
 import { WinnerCell } from '../RecentPulls';
 import { TradePanel } from './TradePanel';
 import { RewardsPanel } from './RewardsPanel';
+import { TaxSplitPanel } from './TaxSplitPanel';
+import { machineTax } from '@/lib/economics';
 
 const BSC = 'https://bscscan.com';
 
@@ -94,7 +96,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
       {/* strategy */}
       <div className="panel mt-6 flex flex-col gap-3 border-accent/40 bg-accent-soft/30 p-4 sm:flex-row sm:items-center">
         <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-3 py-1.5 font-display font-bold uppercase tracking-wide text-black">{info.icon} {info.title}</span>
-        <p className="text-sm text-fg/90">{info.long}{m.split && ` Ratio: ${m.split.dividendBps / 100}% dividend / ${m.split.burnBps / 100}% burn / ${m.split.lpBps / 100}% LP.`} <span className="text-muted">Tax {m.taxBps / 100}% · locked.</span></p>
+        <p className="text-sm text-fg/90">{info.long}{m.split && ` Ratio: ${m.split.dividendBps / 100}% dividend / ${m.split.burnBps / 100}% burn / ${m.split.lpBps / 100}% LP.`} <span className="text-muted">Tax {machineTax(m).buyPct}% buy / {machineTax(m).sellPct}% sell · locked.</span></p>
       </div>
 
       {/* stats */}
@@ -161,6 +163,8 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
           </LivePot>
 
           <TradePanel m={m} />
+
+          <TaxSplitPanel m={m} />
 
           <RewardsPanel m={m} />
 

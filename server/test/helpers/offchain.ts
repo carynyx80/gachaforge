@@ -263,6 +263,8 @@ export interface HarnessOptions {
   provider?: CardProvider | null;
   opsAddress?: Hex | null;
   forge?: string | null;
+  /** Extra ForgeToken fields (taxRecipient, createdTx, …) for the discovered $FORGE. */
+  forgeToken?: Record<string, unknown>;
   now?: () => number;
 }
 
@@ -275,7 +277,7 @@ export function harness(o: HarnessOptions = {}) {
   const store = new MemoryOffchainStore();
   const cfg = loadConfig({ PULL_COOLDOWN_SEC: '0', BNB_USD_PRICE: '600', ...o.env });
   const provider = o.provider === undefined ? new FixedProvider() : o.provider;
-  const forgeStatus = o.forge ? { status: 'live' as const, deployer: null, token: { address: o.forge } as any } : { status: 'waiting' as const, deployer: null };
+  const forgeStatus = o.forge ? { status: 'live' as const, deployer: null, token: { address: o.forge, ...o.forgeToken } as any } : { status: 'waiting' as const, deployer: null };
   const svc = new OffchainService({
     cfg,
     ledger,
@@ -292,10 +294,21 @@ export function harness(o: HarnessOptions = {}) {
   return { chain, backend, repo, bus, ledger, store, cfg, svc, engine: svc.engine, accounts: svc.accounts, ops: svc.ops, provider };
 }
 
-/** Registers TOKEN with the given strategy and credits its pot. */
-export async function machine(h: ReturnType<typeof harness>, strategy: 'RAFFLE' | 'HIT_HUNTER' | 'DIVIDEND' | 'BURN' | 'SPLIT' = 'RAFFLE', potBnb = 0, split?: { dividendBps: number; burnBps: number; lpBps: number }) {
-  await h.engine.adopt(verified(), { pack: 'FORGE_28', strategy, split }, 'api');
+/** Registers TOKEN with the given strategy and credits its pot. `tax`: v3 options; `legacy: true` = a pre-v3 registration row. */
+export async function machine(
+  h: ReturnType<typeof harness>,
+  strategy: 'RAFFLE' | 'HIT_HUNTER' | 'DIVIDEND' | 'BURN' | 'SPLIT' = 'RAFFLE',
+  potBnb = 0,
+  split?: { dividendBps: number; burnBps: number; lpBps: number },
+  tax: { buyTaxBps?: number; sellTaxBps?: number; potShareBps?: number; payout?: string; legacy?: boolean; model?: 'creator' | 'forge' } = {},
+) {
+  await h.engine.adopt(verified({ ...(tax.buyTaxBps ? { buyTaxBps: tax.buyTaxBps } : {}), ...(tax.sellTaxBps ? { sellTaxBps: tax.sellTaxBps } : {}) }), { pack: 'FORGE_28', strategy, split, taxModel: tax.model, potShareBps: tax.potShareBps, payout: tax.payout }, tax.model === 'forge' ? 'forge' : 'api');
   const reg = (await h.store.getRegistration(TOKEN))!;
+  if (tax.legacy) {
+    delete reg.taxModel;
+    delete reg.potShareBps;
+    delete reg.payout;
+  }
   await h.store.saveRegistration({ ...reg, syncedTo: 999 });
   if (potBnb > 0) await h.accounts.book([{ ref: `adjust:${potBnb}`, ts: 1, machine: TOKEN, bucket: 'POT', kind: 'ADJUST', amountWei: bnb(potBnb) }]);
   return reg;

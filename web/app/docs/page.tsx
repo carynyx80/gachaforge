@@ -5,7 +5,7 @@ import { TREASURY_ADDRESS } from '@/lib/docs-i18n';
 
 export const metadata = {
   title: 'Docs — GachaForge',
-  description: 'How GachaForge machines work: tax, packs, strategies, rewards, launching and trust (custodial, off-chain mode).',
+  description: 'How GachaForge machines work: creator-set tax, the GachaForge / creator split, packs, strategies, rewards, creator payouts, $FORGE and trust (custodial, off-chain mode).',
 };
 
 /** Chainlink BNB/USD aggregator on BSC. */
@@ -17,7 +17,7 @@ const env = (v: string | undefined) => (v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v :
 
 const ADDRESSES: DocAddress[] = [
   { key: 'treasury', address: TREASURY_ADDRESS },
-  { key: 'ops', address: env(process.env.NEXT_PUBLIC_OPS_ADDRESS) },
+  { key: 'company', address: env(process.env.NEXT_PUBLIC_SWEEP_TO_ADDRESS) },
   { key: 'portal', address: FLAP_PORTAL },
   { key: 'taxImpl', address: FLAP_TAX_TOKEN_V3_IMPL },
   { key: 'feed', address: BNB_USD_FEED },

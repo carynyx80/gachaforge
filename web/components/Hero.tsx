@@ -23,8 +23,8 @@ export function Hero() {
             <Link href="/launch" className="btn-chunky px-6 py-3 text-base">{t('cta_launch')} →</Link>
             <a href="#board" className="btn-ghost px-6 py-3 text-base">{t('cta_board')}</a>
           </div>
-          <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-muted">
-            <span>{t('hero_tax')}</span><span>{t('hero_split_platform')}</span><span>{t('hero_split_pot')}</span><span>{t('hero_split_buyback')}</span>
+          <div className="mt-8 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-muted">
+            <span>{t('hero_split_1')}</span><span aria-hidden>·</span><span>{t('hero_split_2')}</span><span aria-hidden>·</span><span>{t('hero_split_3')}</span>
           </div>
         </div>
         <div className="relative mx-auto w-64 sm:w-72 md:w-80">

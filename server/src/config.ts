@@ -138,6 +138,13 @@ const schema = z.object({
   LOGS_MAX_RANGE: z.coerce.number().int().min(10).max(50_000).default(2000),
   /** Off-chain estimate of flap.sh's cut until real treasury receipts have been measured, bps of the tax. */
   FLAP_CUT_ESTIMATE_BPS: z.coerce.number().int().min(0).max(5000).default(1000),
+  // ── TAX MODEL v3 ──
+  /** Creator payouts (BNB, from the creator share) run once a creator's owed balance reaches this. */
+  CREATOR_PAYOUT_MIN_BNB: z.coerce.number().nonnegative().default(0.01),
+  CREATOR_PAYOUT_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  /** $FORGE auto-registered as a machine (when its tax recipient is the treasury) with this pack / strategy. */
+  FORGE_PACK: z.enum(['FORGE_28', 'FORGE_48', 'FORGE_88']).default('FORGE_28'),
+  FORGE_STRATEGY: z.enum(['RAFFLE', 'HIT_HUNTER', 'DIVIDEND', 'BURN']).default('RAFFLE'),
   /** Mainnet RPC fallback (shared with the $FORGE watcher) used by offchain mode when RPC_URL is unset. */
   FORGE_RPC_URL: z.string().optional(),
 });

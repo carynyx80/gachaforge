@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Bus } from './bus.js';
-import { feeSplit } from './core/packs.js';
+import { feeSplit, sideTaxBps } from './core/packs.js';
 import type { Repository } from './store/repository.js';
 import type { ActivityEvent, ActivityKind, BurnEvent, FeeEvent, Machine, Pull, RaffleProof, Stats, Trade } from './types.js';
 
@@ -85,7 +85,7 @@ export class Ledger {
   ): Promise<FeeEvent | null> {
     const m0 = await this.repo.getMachine(address);
     if (!m0) return null;
-    const split = feeSplit(t.amountBnb * bnbUsd, m0.taxBps);
+    const split = feeSplit(t.amountBnb * bnbUsd, sideTaxBps(m0, t.side), { model: m0.taxModel ?? 'legacy', potShareBps: m0.potShareBps });
     const e: FeeEvent = {
       id: opts.id ?? `${t.txHash}-${randomUUID().slice(0, 8)}`,
       machine: m0.address.toLowerCase(),

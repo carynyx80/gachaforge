@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Machine } from '@/lib/types';
-import { FLAP_CUT_PCT, SPLIT, TAX_PCT } from '@/lib/economics';
-import { feeUsd, type FeeEvent } from '@/lib/fees';
+import { FLAP_CUT_PCT, machineSplit, machineTax, type MachineTaxFields } from '@/lib/economics';
+import { companyOf, feeUsd, type FeeEvent } from '@/lib/fees';
 import { PACK_LABEL, short, usd } from '@/lib/format';
 import { GachaMachine } from '../GachaMachine';
 import { AnimatedNumber } from './AnimatedNumber';
@@ -11,12 +11,22 @@ import { useOffT } from '../useOffchain';
 
 interface Chip { id: string; text: string; side: FeeEvent['side'] }
 
-export const FEE_ROWS = [
-  { k: 'flapUsd', label: 'flap.sh', pct: `${FLAP_CUT_PCT}% of tax` },
-  { k: 'platformUsd', label: 'GachaForge platform', pct: `${SPLIT.platform}%` },
-  { k: 'potUsd', label: 'Gacha pot', pct: `${SPLIT.pot}%` },
-  { k: 'buybackUsd', label: '$FORGE buyback', pct: `${SPLIT.buyback}%` },
-] as const;
+type RowKey = 'flap' | 'company' | 'buyback' | 'pot' | 'creator';
+const rowValue = (e: FeeEvent, k: RowKey) =>
+  k === 'flap' ? e.flapUsd : k === 'company' ? companyOf(e) : k === 'buyback' ? e.buybackUsd : k === 'pot' ? e.potUsd : (e.creatorUsd ?? 0);
+
+/** Fee rows for one machine, using that token's own split (TAX MODEL v3). */
+export function feeRows(m: MachineTaxFields, t: ReturnType<typeof useOffT>) {
+  const tax = machineTax(m);
+  const p = machineSplit(tax.buyBps, tax.potShareBps).pctOfNet;
+  return [
+    { k: 'flap' as const, label: 'flap.sh', pct: `~${FLAP_CUT_PCT}% ${t('lp_of_tax')}` },
+    { k: 'company' as const, label: t('lp_company'), pct: `${p.company}%` },
+    { k: 'buyback' as const, label: t('lp_buyback'), pct: `${p.buyback}%` },
+    { k: 'pot' as const, label: t('lp_pot'), pct: `${p.pot}%` },
+    { k: 'creator' as const, label: t('lp_creator'), pct: `${p.creator}%` },
+  ];
+}
 
 /** Machine-page pot meter driven by live fee events (falls back to the server-rendered pot). */
 export function LivePot({ m, children }: { m: Machine; children?: ReactNode }) {
@@ -45,14 +55,18 @@ export function LivePot({ m, children }: { m: Machine; children?: ReactNode }) {
   const [chips, setChips] = useState<Chip[]>([]);
   useEffect(() => onFeeEvent((e) => {
     if (e.machine.toLowerCase() !== m.address.toLowerCase()) return;
-    const c: Chip = { id: e.id, text: `+${feeUsd(e.potUsd)} from a ${e.side}`, side: e.side };
+    const cr = e.creatorUsd ?? 0;
+    const c: Chip = { id: e.id, text: `+${feeUsd(e.potUsd)} ${t('lp_pot_short')}${cr > 0 ? ` · +${feeUsd(cr)} ${t('lp_creator_short')}` : ''} · ${e.side}`, side: e.side };
     setChips((xs) => [...xs.slice(-3), c]);
     setTimeout(() => setChips((xs) => xs.filter((x) => x !== c)), 1700);
-  }), [m.address]);
+  }), [m.address, t]);
 
   const pct = Math.min(100, (potNow / packPrice) * 100);
   const left = Math.max(0, packPrice - potNow);
   const latest = events[0];
+  const tax = machineTax(m);
+  const rows = feeRows(m, t);
+  const potPctOfNet = machineSplit(tax.buyBps, tax.potShareBps).pctOfNet.pot;
   const pending = latest?.pending ?? pot?.pending ?? false;
 
   return (
@@ -97,27 +111,27 @@ export function LivePot({ m, children }: { m: Machine; children?: ReactNode }) {
 
       <div className="mt-4 border-t-2 border-line pt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <h4 className="font-display text-[11px] font-bold uppercase tracking-wide">Where this trade&apos;s fee went</h4>
+          <h4 className="font-display text-[11px] font-bold uppercase tracking-wide">{t('lp_where')}</h4>
           {latest && <span className="font-mono text-[10px] text-muted">{short(latest.trader)}</span>}
         </div>
         {latest ? (
           <div key={latest.id} className="fee-in mt-2">
             <div className="mb-1.5 flex flex-wrap gap-x-2 font-mono text-xs">
               <span className={`font-bold ${latest.side === 'BUY' ? 'text-success' : 'text-danger'}`}>{latest.side}</span>
-              <span className="text-muted">{latest.amountBnb} BNB · {TAX_PCT}% tax</span>
+              <span className="text-muted">{latest.amountBnb} BNB · {latest.side === 'SELL' ? tax.sellPct : tax.buyPct}% {t('lp_tax')}</span>
               <span className="font-bold text-glow">{feeUsd(latest.taxUsd)}</span>
             </div>
             <ul className="space-y-1 font-mono text-xs">
-              {FEE_ROWS.map((r) => (
-                <li key={r.k} className={`flex items-center justify-between gap-2 ${r.k === 'potUsd' ? 'text-accent' : ''}`}>
-                  <span className="truncate"><span className={r.k === 'potUsd' ? '' : 'text-fg/80'}>{r.label}</span> <span className="text-muted">{r.pct}</span></span>
-                  <span className="font-bold">{feeUsd(latest[r.k])}</span>
+              {rows.map((r) => (
+                <li key={r.k} className={`flex items-center justify-between gap-2 ${r.k === 'pot' ? 'text-accent' : r.k === 'creator' ? 'text-success' : ''}`}>
+                  <span className={`min-w-0 truncate ${r.k === 'company' || r.k === 'buyback' ? 'pl-2' : ''}`}><span className={r.k === 'pot' || r.k === 'creator' ? '' : 'text-fg/80'}>{r.label}</span> <span className="text-muted">{r.pct}</span></span>
+                  <span className="shrink-0 font-bold">{feeUsd(rowValue(latest, r.k))}</span>
                 </li>
               ))}
             </ul>
           </div>
         ) : (
-          <p className="mt-2 text-xs text-muted">Waiting for the next trade… each buy or sell pays {TAX_PCT}% tax; {SPLIT.pot}% of what reaches GachaForge fills this pot.</p>
+          <p className="mt-2 text-xs text-muted">{t('lp_waiting', { buy: tax.buyPct, sell: tax.sellPct, pot: potPctOfNet })}</p>
         )}
       </div>
       {children}

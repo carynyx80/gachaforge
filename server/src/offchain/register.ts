@@ -2,13 +2,14 @@
  * On-chain verification of a machine launch (SPEC "OFF-CHAIN MODE" → Launch):
  *  1. the tx receipt exists and succeeded;
  *  2. the flap.sh Portal emitted TokenCreated in that tx (that is the token);
- *  3. Portal.getTokenV8Safe(token): buy/sell tax == 200/200 bps, native BNB quote;
+ *  3. Portal.getTokenV8Safe(token): buy/sell tax each 100–1000 bps in whole % (TAX MODEL v3) and equal to what the creator
+ *     signed (when given), native BNB quote;
  *  4. token.taxProcessor().marketAddress() (the beneficiary) == TREASURY_ADDRESS, and no commission receiver.
  */
 import { parseEventLogs, type Hex } from 'viem';
 import { portalAbi } from '../abi/flap.js';
 import { taxProcessorAbi, tokenAbi } from '../abi/token.js';
-import { TAX_BPS } from '../core/packs.js';
+import { isValidTaxBps, MAX_TAX_BPS, MIN_TAX_BPS } from '../core/packs.js';
 import { sameAddr } from '../evm.js';
 
 export type RegisterErrorCode =
@@ -81,8 +82,16 @@ interface V8 {
   price: bigint;
 }
 
+export interface TaxExpectation {
+  /** Exact on-chain buy / sell tax required (the signed values). Omitted: any valid v3 rate. */
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  /** Skip the 1–10% whole-% range check ($FORGE: the owner sets its tax freely). */
+  anyRate?: boolean;
+}
+
 /** Steps 3–4 for an already-known token (also used by auto-detection). */
-export async function verifyToken(client: ChainReader, p: { token: string; portal: string; treasury: string }): Promise<TokenTaxInfo> {
+export async function verifyToken(client: ChainReader, p: { token: string; portal: string; treasury: string; tax?: TaxExpectation }): Promise<TokenTaxInfo> {
   const token = p.token as Hex;
   let st: V8;
   try {
@@ -93,8 +102,11 @@ export async function verifyToken(client: ChainReader, p: { token: string; porta
   if (!st || Number(st.status) === 0) throw new RegistrationError('not_flap_token', `${token} is not a flap.sh Portal token`);
   const buy = Number(st.buyTaxRate);
   const sell = Number(st.sellTaxRate);
-  if (buy !== TAX_BPS || sell !== TAX_BPS)
-    throw new RegistrationError('bad_tax', `tax must be ${TAX_BPS}/${TAX_BPS} bps (2% buy / 2% sell), token has ${buy}/${sell}`, 422, { buyTaxBps: buy, sellTaxBps: sell });
+  const t = p.tax ?? {};
+  if (!t.anyRate && (!isValidTaxBps(buy) || !isValidTaxBps(sell)))
+    throw new RegistrationError('bad_tax', `buy and sell tax must each be ${MIN_TAX_BPS}–${MAX_TAX_BPS} bps in whole % (1%–10%), token has ${buy}/${sell}`, 422, { buyTaxBps: buy, sellTaxBps: sell });
+  if ((t.buyTaxBps !== undefined && t.buyTaxBps !== buy) || (t.sellTaxBps !== undefined && t.sellTaxBps !== sell))
+    throw new RegistrationError('bad_tax', `on-chain tax ${buy}/${sell} bps does not match the signed ${t.buyTaxBps}/${t.sellTaxBps} bps`, 422, { buyTaxBps: buy, sellTaxBps: sell, signedBuyTaxBps: t.buyTaxBps, signedSellTaxBps: t.sellTaxBps });
   if (!sameAddr(st.quoteTokenAddress, ZERO)) throw new RegistrationError('bad_quote', `quote token must be native BNB, token uses ${st.quoteTokenAddress}`);
   let tp: string;
   try {
@@ -123,7 +135,7 @@ export async function verifyToken(client: ChainReader, p: { token: string; porta
 }
 
 /** Full check from the launch tx hash. */
-export async function verifyLaunchTx(client: ChainReader, p: { txHash: string; portal: string; treasury: string }): Promise<VerifiedLaunch> {
+export async function verifyLaunchTx(client: ChainReader, p: { txHash: string; portal: string; treasury: string; tax?: TaxExpectation }): Promise<VerifiedLaunch> {
   let receipt: Awaited<ReturnType<ChainReader['getTransactionReceipt']>>;
   try {
     receipt = await client.getTransactionReceipt({ hash: p.txHash as Hex });
@@ -137,7 +149,7 @@ export async function verifyLaunchTx(client: ChainReader, p: { txHash: string; p
   const ev = created[0];
   if (!ev?.args?.token) throw new RegistrationError('no_token_created', `no flap.sh Portal TokenCreated event in ${p.txHash}`);
   const a = ev.args as { ts?: bigint; creator?: string; token: string; name?: string; symbol?: string; meta?: string };
-  const info = await verifyToken(client, { token: a.token, portal: p.portal, treasury: p.treasury });
+  const info = await verifyToken(client, { token: a.token, portal: p.portal, treasury: p.treasury, tax: p.tax });
   const creator = a.creator && !sameAddr(a.creator, ZERO) && !sameAddr(a.creator, p.portal) ? a.creator : receipt.from;
   return {
     ...info,

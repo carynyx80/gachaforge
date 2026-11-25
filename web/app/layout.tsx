@@ -14,6 +14,9 @@ const mono = Space_Mono({ variable: '--font-spacemono', subsets: ['latin'], weig
 export const metadata: Metadata = {
   title: 'GachaForge — Trade memes. Forge real cards.',
   description: 'Meme-token launchpad on BNB Chain where trading tax pulls real graded trading cards for holders.',
+  metadataBase: new URL('https://gachaforge.xyz'),
+  openGraph: { siteName: 'GachaForge', url: 'https://gachaforge.xyz', type: 'website' },
+  twitter: { card: 'summary_large_image', site: '@Gachaforge', creator: '@Gachaforge' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

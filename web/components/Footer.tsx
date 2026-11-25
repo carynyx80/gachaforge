@@ -20,7 +20,7 @@ export function Footer() {
         <div className="flex flex-col gap-2 text-sm text-muted">
           <a href="/docs" className="hover:text-fg">{t('nav_docs')}</a>
           <a href="/transparency" className="hover:text-fg">{t('nav_transparency')}</a>
-          <a href="https://x.com/" target="_blank" rel="noreferrer" className="hover:text-fg">X / Twitter</a>
+          <a href="https://x.com/Gachaforge" target="_blank" rel="noreferrer" className="hover:text-fg">X · @Gachaforge</a>
           <span className="font-mono text-xs">BNB Chain · $FORGE</span>
         </div>
       </div>

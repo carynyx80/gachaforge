@@ -32,6 +32,11 @@ const TRADER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae8
 const OPS_KEY = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a' as Hex;
 const OPS = privateKeyToAccount(OPS_KEY).address;
 const TREASURY = '0x90F79bf6EB2c4f870365E785982E1f101E93b906' as Hex; // anvil account #3 = test treasury
+const PAYOUT = '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65' as Hex; // anvil account #4 = creator payout address
+// TAX MODEL v3: creator-chosen 5% buy / 3% sell, 40% of the creator share to the pot
+const BUY_TAX = 500;
+const SELL_TAX = 300;
+const POT_SHARE = 4000;
 
 function mineSalt(): Hex {
   const impl = FLAP_TAX_TOKEN_IMPL[56].slice(2).toLowerCase();
@@ -62,7 +67,7 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
     }
     if (!up) throw new Error('anvil did not start');
     // The well-known anvil addresses carry EIP-7702 sweeper delegations on BSC mainnet: clear them on the fork.
-    for (const a of [CREATOR.address, TRADER.address, OPS, TREASURY]) await pc.request({ method: 'anvil_setCode' as never, params: [a, '0x'] as never });
+    for (const a of [CREATOR.address, TRADER.address, OPS, TREASURY, PAYOUT]) await pc.request({ method: 'anvil_setCode' as never, params: [a, '0x'] as never });
   }, 90_000);
   afterAll(() => {
     anvil?.kill('SIGTERM');
@@ -96,8 +101,8 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
             extensionData: '0x',
             dexId: 0,
             lpFeeProfile: 0,
-            buyTaxRate: 200,
-            sellTaxRate: 200,
+            buyTaxRate: BUY_TAX,
+            sellTaxRate: SELL_TAX,
             taxDuration: BigInt(100 * 365 * 86_400),
             antiFarmerDuration: 259_200n,
             mktBps: 10_000,
@@ -127,14 +132,20 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
         START_BLOCK: String(launch.blockNumber),
         PULL_COOLDOWN_SEC: '0',
         BURN_MIN_BNB: '0.001',
+        CREATOR_PAYOUT_MIN_BNB: '0.0001',
       });
       const provider = new FixedProvider(20, 18n * 10n ** 18n);
       const svc = await OffchainService.create({ cfg, ledger, log: silent, provider, fetch: (async () => new Response('{}', { status: 404 })) as typeof fetch });
       const app = await buildApp({ ledger, bus, corsOrigin: [], offchain: svc, health: { mode: 'offchain', chainId: 56, treasury: TREASURY } });
       const created = parseEventLogs({ abi: portalAbi, eventName: 'TokenCreated', logs: launch.logs.filter((l) => l.address.toLowerCase() === PORTAL.toLowerCase()) })[0];
-      const signature = await CREATOR.signMessage({ message: registerMessage({ token: created.args.token, pack: 'FORGE_28', strategy: 'RAFFLE', chainId: 56 }) });
-      const reg = await app.inject({ method: 'POST', url: '/api/machines/register', payload: { txHash: launchTx, pack: 'FORGE_28', strategy: 'RAFFLE', signature } });
+      const v3 = { buyTaxBps: BUY_TAX, sellTaxBps: SELL_TAX, potShareBps: POT_SHARE, payout: PAYOUT };
+      const signature = await CREATOR.signMessage({ message: registerMessage({ token: created.args.token, pack: 'FORGE_28', strategy: 'RAFFLE', ...v3, chainId: 56 }) });
+      // the signed tax must equal the on-chain tax
+      const wrong = await svc.register({ txHash: launchTx, pack: 'FORGE_28', strategy: 'RAFFLE', ...v3, sellTaxBps: BUY_TAX, signature }).catch((e) => e);
+      expect(wrong.code).toBe('bad_tax');
+      const reg = await app.inject({ method: 'POST', url: '/api/machines/register', payload: { txHash: launchTx, pack: 'FORGE_28', strategy: 'RAFFLE', ...v3, signature } });
       expect(reg.statusCode).toBe(201);
+      expect(reg.json().machine).toMatchObject({ buyTaxBps: BUY_TAX, sellTaxBps: SELL_TAX, potShareBps: POT_SHARE, creatorPayout: PAYOUT.toLowerCase(), taxModel: 'creator' });
       const token = reg.json().machine.address as Hex;
       expect(token.endsWith('7777')).toBe(true);
 
@@ -156,7 +167,13 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
       const feesBefore = await repo.listFeeEvents({ machine: token, limit: 10 });
       expect(feesBefore.every((f) => f.pending)).toBe(true);
       const taxWei = await svc.accounts.balance('TAX', token);
-      const estNet = (await svc.accounts.balance('PLATFORM', token)) + (await svc.accounts.balance('POT', token)) + (await svc.accounts.balance('BUYBACK', token));
+      // side-specific tax: buys at 5%, the sell at 3%
+      const tradeRows = (await repo.listTrades(token, 0, 10)).items;
+      const expectTax = tradeRows.reduce((s, t) => s + (parseEther(String(t.amountBnb)) * BigInt(t.side === 'BUY' ? BUY_TAX : SELL_TAX)) / 10_000n, 0n);
+      const taxErr = Number(taxWei > expectTax ? taxWei - expectTax : expectTax - taxWei) / Number(expectTax);
+      expect(taxErr).toBeLessThan(1e-9);
+      const netOf = async () => (await Promise.all((['PLATFORM', 'POT', 'BUYBACK', 'CREATOR'] as const).map((b) => svc.accounts.balance(b, token)))).reduce((a, x) => a + x, 0n);
+      const estNet = await netOf();
 
       // 4. keeper dispatch (ops wallet pays gas) → treasury receives the tax
       const tp = (await pc.readContract({ address: token, abi: tokenAbi, functionName: 'taxProcessor' })) as Hex;
@@ -170,11 +187,31 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
       expect(received).toBeGreaterThan(0n);
       expect(sent1).toBeGreaterThan(sent0 - 1n);
       expect(sent1).toBe(received); // all tax of this token reached the test treasury
-      const net = (await svc.accounts.balance('PLATFORM', token)) + (await svc.accounts.balance('POT', token)) + (await svc.accounts.balance('BUYBACK', token));
+      const net = await netOf();
       expect(net).toBe(received); // reconciled ledger == real receipts
+      // v3 split of the receipts: 5% company, 5% buyback, 90% creator share → 40% pot / 60% creator (± rounding wei)
+      const [company, pot, buyback, creatorOwed] = await Promise.all((['PLATFORM', 'POT', 'BUYBACK', 'CREATOR'] as const).map((b) => svc.accounts.balance(b, token)));
+      const near = (x: bigint, y: bigint) => expect(x > y ? x - y : y - x).toBeLessThan(100n);
+      near(company, (received * 500n) / 10_000n);
+      near(buyback, (received * 500n) / 10_000n);
+      near(pot, (received * 9000n * BigInt(POT_SHARE)) / 10n ** 8n);
+      near(creatorOwed, (received * 9000n * BigInt(10_000 - POT_SHARE)) / 10n ** 8n);
+      expect((await repo.getMachine(token))!.creatorOwedBnb).toBeCloseTo(Number(creatorOwed) / 1e18, 6);
+      const tr = (await app.inject({ method: 'GET', url: '/api/transparency' })).json();
+      expect(tr.owed.creators).toBeCloseTo(Number(creatorOwed) / 1e18, 6);
+
+      // creator payout: ops wallet → payout address, exactly the owed balance, outside the daily cap
+      const payout0 = await pc.getBalance({ address: PAYOUT });
+      const spentBefore = await svc.ops.spent24h();
+      await svc.engine.tickCreatorPayouts();
+      expect((await pc.getBalance({ address: PAYOUT })) - payout0).toBe(creatorOwed);
+      expect(await svc.accounts.balance('CREATOR', token)).toBe(0n);
+      expect(await svc.ops.spent24h()).toBe(spentBefore);
+      expect((await repo.getMachine(token))!.creatorPaidBnb).toBeCloseTo(Number(creatorOwed) / 1e18, 6);
+      expect((await svc.store.listOpsTxs({ limit: 5 })).find((t) => t.kind === 'CREATOR_PAYOUT')).toMatchObject({ status: 'CONFIRMED', amountWei: creatorOwed });
       const estErr = Number(estNet > received ? estNet - received : received - estNet) / Number(received);
       expect(estErr).toBeLessThan(0.25); // pre-dispatch estimate within tolerance
-      const share = await svc.accounts.shareBps();
+      const share = await svc.accounts.shareBps(await svc.store.getRegistration(token));
       expect(share).toBeGreaterThanOrEqual(5000);
       expect((await repo.listFeeEvents({ machine: token, limit: 10 })).every((f) => !f.pending)).toBe(true);
       const txs = await svc.store.listOpsTxs({ limit: 20 });
@@ -205,7 +242,7 @@ describe.skipIf(!RPC)('OFF-CHAIN MODE on a BSC mainnet fork (anvil)', () => {
       expect(await pc.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [OPS] })).toBe(0n);
       expect(await svc.accounts.balance('BURN', token)).toBe(0n);
       const t = (await app.inject({ method: 'GET', url: '/api/transparency' })).json();
-      expect(t.txs.length).toBeGreaterThanOrEqual(4);
+      expect(t.txs.length).toBeGreaterThanOrEqual(5);
       expect(t.ledger.measured).toBe(true);
       console.log(`[fork] pull spent ${Number(spent) / 1e18} BNB for 28 USDT; burned ${Number(dead) / 1e18} tokens; ops txs ${t.txs.map((x: any) => `${x.kind}:${x.label}:${x.status}`).join(', ')}`);
       await app.close();

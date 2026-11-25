@@ -287,7 +287,7 @@ describe('$FORGE buyback, SPLIT, sweep, transparency', () => {
     const app = await buildApp({ ledger: h.ledger, bus: h.bus, corsOrigin: [], offchain: h.svc, health: { mode: 'offchain', chainId: 56, treasury: TREASURY } });
     const t = (await app.inject({ method: 'GET', url: '/api/transparency' })).json();
     expect(Object.keys(t).sort()).toEqual(['balances', 'chainId', 'ledger', 'machines', 'mode', 'ops', 'owed', 'treasury', 'txs', 'updatedAt']);
-    expect(Object.keys(t.owed).sort()).toEqual(['burnsPending', 'buyback', 'dividendsPending', 'pots', 'total']);
+    expect(Object.keys(t.owed).sort()).toEqual(['burnsPending', 'buyback', 'creators', 'dividendsPending', 'pots', 'total']);
     expect(t.owed.pots).toBe(0.01);
     expect(t.treasury.address).toBe(TREASURY);
     expect(t.ops).toMatchObject({ address: OPS, ready: true, paused: false, dailyCapBnb: 1 });

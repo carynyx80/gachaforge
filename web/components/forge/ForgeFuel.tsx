@@ -7,6 +7,7 @@ import type { BurnEvent, Paged } from '@/lib/types';
 import { useTween } from '../live/AnimatedNumber';
 import { useForgeT } from './useForge';
 import type { ForgeKey } from '@/lib/forge-i18n';
+import { FORGE_SPLIT, GF_BUYBACK_PCT, GF_COMPANY_PCT } from '@/lib/economics';
 
 type Burns = { totalBurned: number; pctOfSupply: number } & Paged<BurnEvent>;
 
@@ -36,7 +37,36 @@ const STEPS: { k: ForgeKey; icon: string; hot?: boolean }[] = [
   { k: 'f_dead', icon: '🔥', hot: true },
 ];
 
-/** Animated flow: machine trade → tax → 3% share → BuybackBurner → buys $FORGE → dead address. */
+/** $FORGE's own 2% model next to the machine-token model that feeds it (TAX MODEL v3). */
+export function ForgeModel() {
+  const t = useForgeT();
+  const fs = [
+    { l: t('model_co'), v: FORGE_SPLIT.company, c: '#F4F7EE' },
+    { l: t('model_pot'), v: FORGE_SPLIT.pot, c: '#B6FF2E' },
+    { l: t('model_bb'), v: FORGE_SPLIT.buyback, c: '#D4FF7A' },
+  ];
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="panel min-w-0 p-4 sm:p-5">
+        <div className="text-xs uppercase tracking-widest text-muted">{t('model_forge_t')}</div>
+        <div className="mt-1 font-mono text-2xl font-bold text-glow">{t('model_forge_v')}</div>
+        <div className="mt-3 flex h-3 overflow-hidden rounded-sm bg-black/60 ring-1 ring-line" aria-hidden>{fs.map((x) => <span key={x.l} style={{ width: `${x.v}%`, background: x.c }} />)}</div>
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">{fs.map((x) => <li key={x.l} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: x.c }} /><span className="font-sans text-muted">{x.l}</span> {x.v}%</li>)}</ul>
+        <p className="mt-3 text-xs leading-relaxed text-muted">{t('model_forge_d')}</p>
+      </div>
+      <div className="panel min-w-0 border-accent/50 bg-accent-soft/30 p-4 sm:p-5">
+        <div className="text-xs uppercase tracking-widest text-muted">{t('model_machine_t')}</div>
+        <div className="mt-1 font-mono text-2xl font-bold text-accent">{t('model_machine_v')}</div>
+        <div className="mt-3 flex h-3 overflow-hidden rounded-sm bg-black/60 ring-1 ring-line" aria-hidden>
+          <span style={{ width: `${GF_COMPANY_PCT}%`, background: '#F4F7EE' }} /><span style={{ width: `${GF_BUYBACK_PCT}%`, background: '#D4FF7A' }} /><span className="flex-1" style={{ background: '#2B3322' }} />
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted">{t('model_machine_d')}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Animated flow: machine trade → tax → 5% share → buyback ledger → buys $FORGE → dead address. */
 export function FuelFlow() {
   const t = useForgeT();
   return (
@@ -71,6 +101,7 @@ export function ForgeFuel({ pendingBnb, totalBnb, burnedTokens }: { pendingBnb?:
     <section id="fuel" className="mt-14">
       <h2 className="font-display text-2xl font-extrabold uppercase sm:text-3xl">{t('fuel_title')}</h2>
       <p className="mt-2 max-w-2xl text-muted">{t('fuel_sub')}</p>
+      <div className="mt-6"><ForgeModel /></div>
       <div className="panel relative mt-6 overflow-hidden p-4 sm:p-6">
         <div className="forge-scan pointer-events-none absolute inset-0" />
         <div className="relative"><FuelFlow /></div>

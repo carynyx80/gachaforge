@@ -146,3 +146,21 @@ No GachaForge smart contracts are deployed. Everything custodial, run by the bac
 - **Safety rails:** daily spend cap `OPS_DAILY_CAP_BNB`; per-pull cap pack price +10%; kill switch `OPS_PAUSED=true`; every outgoing tx recorded and shown publicly on a `/transparency` page (ledger totals per machine, all ops wallet txs with BscScan links, treasury balance vs total owed to pots+buyback).
 - **APIs added:** `POST /api/machines/register`, `GET /api/transparency` (`{ treasury, ops, balances, owed: { pots, buyback, dividendsPending }, txs: [...] }`), machine fields `pullQueued: boolean`.
 - Contracts in contracts/ are kept in the repo for a possible future trustless version but are NOT used.
+
+## TAX MODEL v3 (owner decision 2026-11-25) — supersedes the fixed-2% / 90-7-3 rule for machine tokens
+Two kinds of tokens:
+
+### A) Machine tokens launched on GachaForge (creator tokens)
+- **Tax rate chosen by the creator** at launch: buy and sell separately, each 1%–10% (100–1000 bps, whole %, flap.sh limits). Tax recipient = ops wallet `TREASURY_ADDRESS` (0x9B187a70d23d2660A1056C4bF142B9feA917Ac76).
+- Of the tax that reaches the ops wallet (after flap.sh's cut, ~10% at low rates — use the measured ratio per token):
+  - **10% GachaForge**, split **5% company** (swept to SWEEP_TO_ADDRESS 0x157c…bc85 with the rest of the platform money) and **5% $FORGE buyback & burn**.
+  - **90% creator share**, split by the creator at launch between:
+    - **gacha pot** — at least **20% of the creator share** (= 18% of tax), up to 100%; and
+    - **creator payout** — the rest, paid in BNB by the ops wallet to the creator's payout address (defaults to the launching wallet; may be set to another address at registration) whenever the creator's owed balance ≥ `CREATOR_PAYOUT_MIN_BNB` (default 0.01), checked every `CREATOR_PAYOUT_INTERVAL_MS` (default 60 s). Creator payouts are excluded from the daily spend cap but can never exceed the creator's ledger balance.
+  - Constants: `GF_SHARE_BPS=1000`, `GF_COMPANY_BPS=5000` and `GF_BUYBACK_BPS=5000` (of the GF share), `CREATOR_POT_MIN_BPS=2000` (of the creator share).
+- Strategy, pack, tax rates, pot share and payout address are recorded at registration and immutable. Registration message (EIP-191, signed by the launch tx sender) now includes: token, pack, strategy, split, buyTaxBps, sellTaxBps, potShareBps (of creator share, 2000–10000), payout address, chainId. Backend verifies buy/sell tax on-chain equals the signed values and recipient == TREASURY_ADDRESS.
+- Machine model gains: `buyTaxBps`, `sellTaxBps`, `potShareBps`, `creatorPayout` (address), `creatorPaidBnb`, `creatorOwedBnb`. (Old `taxBps` = buyTaxBps for compatibility.)
+- FeeEvent gains `creatorUsd`, `companyUsd`; `platformUsd` = companyUsd (5%), `buybackUsd` = 5% GF share, `potUsd` = pot share. Fee summary adds `creatorUsd`.
+
+### B) $FORGE (GachaForge's own token, launched by the owner directly on flap.sh)
+- Owner sets its tax on flap.sh (planned 2% buy / 2% sell). If its tax recipient == TREASURY_ADDRESS, the backend auto-registers it as a machine with the **$FORGE split: 90% company / 7% gacha pot / 3% $FORGE buyback**, strategy RAFFLE, pack FORGE_28 (owner can change via `FORGE_PACK`, `FORGE_STRATEGY` env before discovery). If the recipient is anything else, $FORGE is display/trade-only.

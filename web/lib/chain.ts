@@ -18,8 +18,8 @@ export const NATIVE: Address = '0x0000000000000000000000000000000000000000';
 export const ZERO_HASH = '0x0000000000000000000000000000000000000000000000000000000000000000' as const;
 
 const treasuryEnv = process.env.NEXT_PUBLIC_TREASURY_ADDRESS || '';
-/** GachaForge company treasury: tax recipient of every machine token (SPEC "OFF-CHAIN MODE"). */
-export const TREASURY_ADDRESS: Address = isAddress(treasuryEnv) ? (treasuryEnv as Address) : '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c';
+/** GachaForge ops wallet (TREASURY_ADDRESS): tax recipient of every machine token (SPEC "OFF-CHAIN MODE"). */
+export const TREASURY_ADDRESS: Address = isAddress(treasuryEnv) ? (treasuryEnv as Address) : '0x9B187a70d23d2660A1056C4bF142B9feA917Ac76';
 
 /** Portal.newTokenV6 durations — same values as contracts/script/Deploy.s.sol (fork-tested in Portal mode). */
 export const FLAP_TAX_DURATION = BigInt(100 * 365 * 24 * 3600); // 100 years

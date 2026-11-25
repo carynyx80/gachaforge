@@ -17,7 +17,7 @@ export const STRATEGY_INFO: Record<Strategy, { icon: string; title: string; shor
     icon: '💸',
     title: 'Dividend',
     short: 'Cards become BNB for holders.',
-    long: 'Every card is sold back and the BNB is shared pro-rata between eligible holders. Claim any time; large balances are pushed automatically.',
+    long: 'Every card is sold back and the BNB is shared pro-rata between eligible holders. It is sent to their wallets automatically — no claiming needed.',
   },
   BURN: {
     icon: '🔥',

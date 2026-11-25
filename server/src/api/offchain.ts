@@ -12,6 +12,11 @@ const registerBody = z.object({
   split: z
     .object({ dividendBps: z.number().int().min(0).max(10_000), burnBps: z.number().int().min(0).max(10_000), lpBps: z.number().int().min(0).max(10_000) })
     .optional(),
+  /** TAX MODEL v3 (all three required together; payout optional = launch wallet). Must match what was signed. */
+  buyTaxBps: z.number().int().optional(),
+  sellTaxBps: z.number().int().optional(),
+  potShareBps: z.number().int().optional(),
+  payout: z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'payout must be a 0x address').optional(),
   /** EIP-191 personal_sign by the launch tx sender over the canonical registration message (src/offchain/message.ts). */
   signature: z.string().regex(/^0x[0-9a-fA-F]{130,}$/, 'signature must be a 0x-prefixed personal_sign signature'),
 });
@@ -52,7 +57,7 @@ export async function registerOffchainRoutes(app: FastifyInstance, deps: { mode:
 
   app.get('/api/transparency', async () => {
     if (deps.offchain) return deps.offchain.transparency();
-    const zero = { pots: 0, buyback: 0, dividendsPending: 0, burnsPending: 0, total: 0 };
+    const zero = { pots: 0, creators: 0, buyback: 0, dividendsPending: 0, burnsPending: 0, total: 0 };
     return { mode: deps.mode, chainId: deps.chainId, treasury: { address: deps.treasury, balanceBnb: 0, url: null }, ops: null, balances: {}, owed: zero, ledger: null, machines: [], txs: [], updatedAt: Math.floor(Date.now() / 1000) };
   });
 }

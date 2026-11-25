@@ -7,13 +7,14 @@ const ACTIVITY_CAP = 5000;
 /** The simulator emits several fee events per second; keep a bounded window (totals are kept separately). */
 const FEE_CAP = 20_000;
 const BUCKET_S = 60;
-const zeroTotals = (): FeeTotals => ({ totalTaxUsd: 0, flapUsd: 0, platformUsd: 0, potUsd: 0, buybackUsd: 0 });
+const zeroTotals = (): FeeTotals => ({ totalTaxUsd: 0, flapUsd: 0, platformUsd: 0, potUsd: 0, buybackUsd: 0, creatorUsd: 0 });
 const addTotals = (t: FeeTotals, e: FeeEvent) => {
   t.totalTaxUsd += e.taxUsd;
   t.flapUsd += e.flapUsd;
   t.platformUsd += e.platformUsd;
   t.potUsd += e.potUsd;
   t.buybackUsd += e.buybackUsd;
+  t.creatorUsd += e.creatorUsd ?? 0;
 };
 const roundTotals = (t: FeeTotals): FeeTotals => ({
   totalTaxUsd: r2(t.totalTaxUsd),
@@ -21,6 +22,7 @@ const roundTotals = (t: FeeTotals): FeeTotals => ({
   platformUsd: r2(t.platformUsd),
   potUsd: r2(t.potUsd),
   buybackUsd: r2(t.buybackUsd),
+  creatorUsd: r2(t.creatorUsd),
 });
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -130,6 +132,7 @@ export class MemoryRepository implements Repository {
       last.platformUsd += t.platformUsd;
       last.potUsd += t.potUsd;
       last.buybackUsd += t.buybackUsd;
+      last.creatorUsd += t.creatorUsd;
     }
     return { ...roundTotals(this.feeTotals), last24h: roundTotals(last) };
   }

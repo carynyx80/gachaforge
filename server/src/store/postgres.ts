@@ -86,6 +86,7 @@ export class PostgresRepository implements Repository {
         platformUsd: e.platformUsd,
         potUsd: e.potUsd,
         buybackUsd: e.buybackUsd,
+        creatorUsd: e.creatorUsd ?? 0,
         data,
       })
       .onConflictDoNothing()
@@ -121,16 +122,18 @@ export class PostgresRepository implements Repository {
         platform: sum(s.feeEvents.platformUsd),
         pot: sum(s.feeEvents.potUsd),
         buyback: sum(s.feeEvents.buybackUsd),
+        creator: sum(s.feeEvents.creatorUsd),
         tax24: sql<string | null>`sum(${s.feeEvents.taxUsd}) filter (where ${recent})`,
         flap24: sql<string | null>`sum(${s.feeEvents.flapUsd}) filter (where ${recent})`,
         platform24: sql<string | null>`sum(${s.feeEvents.platformUsd}) filter (where ${recent})`,
         pot24: sql<string | null>`sum(${s.feeEvents.potUsd}) filter (where ${recent})`,
         buyback24: sql<string | null>`sum(${s.feeEvents.buybackUsd}) filter (where ${recent})`,
+        creator24: sql<string | null>`sum(${s.feeEvents.creatorUsd}) filter (where ${recent})`,
       })
       .from(s.feeEvents);
     const n = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
-    const last24h: FeeTotals = { totalTaxUsd: n(r?.tax24), flapUsd: n(r?.flap24), platformUsd: n(r?.platform24), potUsd: n(r?.pot24), buybackUsd: n(r?.buyback24) };
-    return { totalTaxUsd: n(r?.tax), flapUsd: n(r?.flap), platformUsd: n(r?.platform), potUsd: n(r?.pot), buybackUsd: n(r?.buyback), last24h };
+    const last24h: FeeTotals = { totalTaxUsd: n(r?.tax24), flapUsd: n(r?.flap24), platformUsd: n(r?.platform24), potUsd: n(r?.pot24), buybackUsd: n(r?.buyback24), creatorUsd: n(r?.creator24) };
+    return { totalTaxUsd: n(r?.tax), flapUsd: n(r?.flap), platformUsd: n(r?.platform), potUsd: n(r?.pot), buybackUsd: n(r?.buyback), creatorUsd: n(r?.creator), last24h };
   }
 
   async addActivity(e: ActivityEvent) {

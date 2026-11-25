@@ -134,6 +134,8 @@ export const feeEvents = pgTable(
     platformUsd: doublePrecision('platform_usd').notNull(),
     potUsd: doublePrecision('pot_usd').notNull(),
     buybackUsd: doublePrecision('buyback_usd').notNull(),
+    /** TAX MODEL v3 (migration 0005; 0 for older rows). */
+    creatorUsd: doublePrecision('creator_usd').notNull().default(0),
     data: jsonb('data').$type<FeeEvent>().notNull(),
   },
   (t) => [index('fee_events_ts_idx').on(t.timestamp), index('fee_events_machine_ts_idx').on(t.machine, t.timestamp), index('fee_events_machine_pending_idx').on(t.machine, t.pending)],
@@ -208,5 +210,5 @@ export const opsTxs = pgTable(
     error: text('error'),
     nonce: integer('nonce'),
   },
-  (t) => [index('ops_txs_created_idx').on(t.createdAt), index('ops_txs_dedupe_idx').on(t.dedupeKey, t.status)],
+  (t) => [index('ops_txs_created_idx').on(t.createdAt), index('ops_txs_dedupe_idx').on(t.dedupeKey, t.status), index('ops_txs_kind_machine_idx').on(t.kind, t.machine)],
 );

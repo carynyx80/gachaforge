@@ -165,5 +165,5 @@ export async function registerRoutes(
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** SPEC: `pullQueued` is always present on machines (rows stored before the field existed default to false). */
-const withDefaults = (m: Machine): Machine => ({ ...m, pullQueued: m.pullQueued ?? false });
+const withDefaults = (m: Machine): Machine => ({ ...m, pullQueued: m.pullQueued ?? false, buyTaxBps: m.buyTaxBps ?? m.taxBps, sellTaxBps: m.sellTaxBps ?? m.taxBps });
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;

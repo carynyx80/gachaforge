@@ -12,9 +12,14 @@ export interface FeeEvent {
   timestamp: number;
   taxUsd: number;
   flapUsd: number;
+  /** TAX MODEL v3: = companyUsd (GachaForge company 5% of the tax that reaches GachaForge). */
   platformUsd: number;
   potUsd: number;
   buybackUsd: number;
+  /** TAX MODEL v3: creator payout share of this trade (0 / absent for $FORGE and pre-v3 events). */
+  creatorUsd?: number;
+  /** TAX MODEL v3: GachaForge company share (falls back to platformUsd). */
+  companyUsd?: number;
   potAfterUsd: number;
   packPriceUsd: number;
   pending: boolean;
@@ -26,6 +31,8 @@ export interface FeeTotals {
   platformUsd: number;
   potUsd: number;
   buybackUsd: number;
+  /** TAX MODEL v3: paid / owed to creators. */
+  creatorUsd?: number;
 }
 export interface FeeSummary extends FeeTotals {
   last24h: FeeTotals;
@@ -59,8 +66,12 @@ export function addToTotals(t: FeeTotals, e: FeeEvent): FeeTotals {
     platformUsd: t.platformUsd + e.platformUsd,
     potUsd: t.potUsd + e.potUsd,
     buybackUsd: t.buybackUsd + e.buybackUsd,
+    creatorUsd: (t.creatorUsd ?? 0) + (e.creatorUsd ?? 0),
   };
 }
+
+/** Company share of an event (v3 companyUsd, else platformUsd). */
+export const companyOf = (e: Pick<FeeEvent, 'platformUsd' | 'companyUsd'>) => e.companyUsd ?? e.platformUsd;
 
 /** Small-dollar formatter: fees are often cents. */
 export const feeUsd = (n: number) =>

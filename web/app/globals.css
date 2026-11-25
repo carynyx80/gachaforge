@@ -152,3 +152,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Range slider (launch form): accent thumb, 16px, track fills to the value via accent-color fallback */
+.gf-range { -webkit-appearance: none; appearance: none; height: 1.25rem; background: transparent; cursor: pointer; --fill: 50%; }
+.gf-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--fill), #2B3322 var(--fill)); }
+.gf-range::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--fill), #2B3322 var(--fill)); }
+.gf-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%; background: var(--accent); border: 2px solid #050505; box-shadow: 0 0 0 2px var(--accent); }
+.gf-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid #050505; }
+.gf-range:focus-visible { outline: none; }
+.gf-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px #B6FF2E55; }
+.gf-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px #B6FF2E55; }

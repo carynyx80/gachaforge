@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useT } from '@/components/LangProvider';
-import { DOC_SECTIONS, docsDict, type DocSection } from '@/lib/docs-i18n';
-import { FLAP_CUT_PCT, PACKS, SPLIT, TAX_PCT, money, volumePerPull } from '@/lib/economics';
+import { DOC_SECTIONS, FORGE, FREQ_SCENARIOS, MACHINE, docsDict, netShares, volumePerPull, type DocSection } from '@/lib/docs-i18n';
+import { FLAP_CUT_PCT, PACKS, money } from '@/lib/economics';
 import { STRATEGY_INFO } from '@/lib/strategies';
 import { addrUrl } from '@/lib/chain';
 import type { Strategy } from '@/lib/types';
@@ -80,6 +80,9 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
   const segPlat = 'bg-surface text-fg border-r border-line';
   const segPot = 'bg-accent text-black';
   const segBuy = 'bg-glow text-black';
+  const segCreator = 'bg-success/80 text-black';
+  /** Example pot share used in the bars (matches the worked example). */
+  const ns = netShares(50);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-8 px-4 pb-20 pt-10 lg:grid-cols-[230px_1fr] lg:gap-12">
@@ -130,19 +133,20 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
           </div>
           <div className="panel p-5">
             <div className="flex flex-col items-center gap-2 text-center text-sm">
-              <div className="rounded-md border-2 border-accent px-4 py-2 font-semibold">{d.how.taxLabel} · <span className="font-mono text-accent">{TAX_PCT}%</span></div>
+              <div className="rounded-md border-2 border-accent px-4 py-2 font-semibold">{d.how.taxLabel} · <span className="font-mono text-accent">{d.how.taxValue}</span></div>
               <div className="h-5 w-px bg-accent/60" />
-              <div className="grid w-full max-w-xl grid-cols-[1fr_3fr] gap-2">
-                <div className="rounded-md border border-line bg-muted/10 px-3 py-2"><div className="text-xs text-muted">{d.how.flapLabel}</div><div className="font-mono">{FLAP_CUT_PCT}%</div></div>
-                <div className="rounded-md border border-accent/50 px-3 py-2"><div className="text-xs text-muted">{d.how.gfLabel}</div><div className="font-mono">{net}%</div></div>
+              <div className="grid w-full max-w-2xl grid-cols-[1fr_4fr] gap-2">
+                <div className="rounded-md border border-line bg-muted/10 px-3 py-2"><div className="text-xs text-muted">{d.how.flapLabel}</div><div className="font-mono">~{FLAP_CUT_PCT}%</div></div>
+                <div className="rounded-md border border-accent/50 px-3 py-2"><div className="text-xs text-muted">{d.how.gfLabel}</div><div className="font-mono">~{net}%</div></div>
               </div>
-              <div className="grid w-full max-w-xl grid-cols-[1fr_3fr] gap-2"><div /><div className="mx-auto h-5 w-px bg-accent/60" /></div>
-              <div className="grid w-full max-w-xl grid-cols-[1fr_3fr] gap-2">
+              <div className="grid w-full max-w-2xl grid-cols-[1fr_4fr] gap-2"><div /><div className="mx-auto h-5 w-px bg-accent/60" /></div>
+              <div className="grid w-full max-w-2xl grid-cols-[1fr_4fr] gap-2">
                 <div />
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-md border border-line px-2 py-2"><div className="text-xs text-muted">{d.how.platformLabel}</div><div className="font-mono">{SPLIT.platform}%</div></div>
-                  <div className="rounded-md bg-accent px-2 py-2 text-black"><div className="text-xs">{d.how.potLabel}</div><div className="font-mono font-bold">{SPLIT.pot}%</div></div>
-                  <div className="rounded-md bg-glow px-2 py-2 text-black"><div className="text-xs">{d.how.buybackLabel}</div><div className="font-mono font-bold">{SPLIT.buyback}%</div></div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-md border border-line px-2 py-2"><div className="text-xs text-muted">{d.how.companyLabel}</div><div className="font-mono">{(MACHINE.gfPct * MACHINE.gfCompanyPct) / 100}%</div></div>
+                  <div className="rounded-md bg-glow px-2 py-2 text-black"><div className="text-xs">{d.how.buybackLabel}</div><div className="font-mono font-bold">{(MACHINE.gfPct * MACHINE.gfBuybackPct) / 100}%</div></div>
+                  <div className="rounded-md bg-accent px-2 py-2 text-black"><div className="text-xs">{d.how.potLabel}</div><div className="font-mono font-bold">{d.how.potValue}</div></div>
+                  <div className="rounded-md bg-success/80 px-2 py-2 text-black"><div className="text-xs">{d.how.creatorLabel}</div><div className="font-mono font-bold">{d.how.creatorValue}</div></div>
                 </div>
               </div>
             </div>
@@ -154,40 +158,52 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
         <section className="space-y-5">
           <H id="fees" n={3}>{d.nav.fees}</H>
           <p>{d.fees.intro}</p>
+          <div className="panel p-5"><Bullets items={d.fees.splitList} /></div>
           <div className="panel space-y-6 p-5">
             <Bar label={d.fees.barWhole} segs={[
               { pct: FLAP_CUT_PCT, label: d.fees.seg.flap, cls: segFlap },
-              { pct: (net * SPLIT.platform) / 100, label: d.fees.seg.platform, cls: segPlat },
-              { pct: (net * SPLIT.pot) / 100, label: d.fees.seg.pot, cls: segPot },
-              { pct: (net * SPLIT.buyback) / 100, label: d.fees.seg.buyback, cls: segBuy },
+              { pct: (net * ns.company) / 100, label: d.fees.seg.company, cls: segPlat },
+              { pct: (net * ns.buyback) / 100, label: d.fees.seg.buyback, cls: segBuy },
+              { pct: (net * ns.pot) / 100, label: d.fees.seg.pot, cls: segPot },
+              { pct: (net * ns.creator) / 100, label: d.fees.seg.creator, cls: segCreator },
             ]} />
-            <Bar label={d.fees.barVault} segs={[
-              { pct: SPLIT.platform, label: d.fees.seg.platform, cls: segPlat },
-              { pct: SPLIT.pot, label: d.fees.seg.pot, cls: segPot },
-              { pct: SPLIT.buyback, label: d.fees.seg.buyback, cls: segBuy },
+            <Bar label={d.fees.barNet} segs={[
+              { pct: ns.company, label: d.fees.seg.company, cls: segPlat },
+              { pct: ns.buyback, label: d.fees.seg.buyback, cls: segBuy },
+              { pct: ns.pot, label: d.fees.seg.pot, cls: segPot },
+              { pct: ns.creator, label: d.fees.seg.creator, cls: segCreator },
             ]} />
-            <p className="text-xs text-muted">{d.fees.flapNote} {d.fees.creator}</p>
+            <p className="text-xs text-muted">{d.fees.flapNote}</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="panel border-accent/40 p-5">
               <H3>{d.fees.exTitle}</H3>
+              <p className="mt-1 text-sm text-muted">{d.fees.exIntro}</p>
               <dl className="mt-3 divide-y divide-line text-sm">
-                {d.fees.exRows.map(([k, v], i) => (
-                  <div key={k} className={`flex justify-between py-1.5 ${i === 3 ? 'font-semibold' : ''}`}><dt className="text-muted">{k}</dt><dd className={`font-mono ${i === 5 ? 'text-accent' : ''}`}>{v}</dd></div>
+                {d.fees.exRows.map((r) => (
+                  <div key={r.k} className={`flex justify-between py-1.5 ${r.s === 'bold' ? 'font-semibold' : ''} ${r.s === 'sub' ? 'pl-4 text-xs' : ''}`}>
+                    <dt className="text-muted">{r.k}</dt><dd className={`font-mono ${r.s === 'hit' ? 'text-accent' : ''}`}>{r.v}</dd>
+                  </div>
                 ))}
               </dl>
               <p className="mt-3 text-xs text-muted">{d.fees.exNote}</p>
             </div>
             <div className="space-y-4">
               <div className="panel p-5"><H3>{d.fees.startTitle}</H3><p className="mt-2 text-sm text-muted">{d.fees.startBody}</p></div>
-              <div className="panel p-5">
+              <div className="panel overflow-x-auto p-5">
                 <H3>{d.fees.freqTitle}</H3>
                 <p className="mt-2 text-sm text-muted">{d.fees.freqIntro}</p>
-                <table className="mt-3 w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-widest text-muted"><tr><th className="py-1">{d.fees.freqCols[0]}</th><th className="py-1 text-right">{d.fees.freqCols[1]}</th></tr></thead>
+                <table className="mt-3 w-full min-w-[360px] text-sm">
+                  <thead className="text-left text-xs uppercase tracking-widest text-muted">
+                    <tr><th className="py-1">{d.fees.freqCol}</th>{FREQ_SCENARIOS.map(([tx, pt]) => <th key={`${tx}-${pt}`} className="py-1 text-right normal-case tracking-normal">{d.fees.freqScenario(tx, pt)}</th>)}</tr>
+                  </thead>
                   <tbody className="divide-y divide-line font-mono">
-                    {PACKS.map((p) => <tr key={p.id}><td className="py-1.5">{money(p.usd)}</td><td className="py-1.5 text-right text-accent">≈ {money(Math.round(volumePerPull(p.usd)))}</td></tr>)}
+                    {PACKS.map((p) => (
+                      <tr key={p.id}><td className="py-1.5">{money(p.usd)}</td>
+                        {FREQ_SCENARIOS.map(([tx, pt]) => <td key={`${tx}-${pt}`} className="py-1.5 text-right text-accent">≈ {money(Math.round(volumePerPull(p.usd, tx, pt)))}</td>)}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
                 <p className="mt-2 text-xs text-muted">{d.fees.freqNote}</p>
@@ -264,7 +280,7 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
         <section className="space-y-5">
           <H id="launch" n={7}>{d.nav.launch}</H>
           <p className="text-muted">{d.launch.intro}</p>
-          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {d.launch.steps.map((s, i) => (
               <li key={s.t} className="panel p-4"><div className="font-mono text-xs text-accent">STEP {i + 1}</div><div className="mt-1 font-semibold">{s.t}</div><p className="mt-1 text-xs text-muted">{s.d}</p></li>
             ))}
@@ -281,7 +297,13 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
         <section className="space-y-4">
           <H id="forge" n={8}>{d.nav.forge}</H>
           <div className="panel space-y-3 p-5 text-sm">
-            <p>{d.forge.p1}</p><p className="text-muted">{d.forge.p2}</p><p className="text-muted">{d.forge.p3}</p>
+            <p>{d.forge.p1}</p>
+            <Bar label={d.forge.barLabel} segs={[
+              { pct: FORGE.companyPct, label: d.forge.seg.company, cls: segPlat },
+              { pct: FORGE.potPct, label: d.forge.seg.pot, cls: segPot },
+              { pct: FORGE.buybackPct, label: d.forge.seg.buyback, cls: segBuy },
+            ]} />
+            <p className="text-muted">{d.forge.p2}</p><p className="text-muted">{d.forge.p3}</p><p className="text-muted">{d.forge.p4}</p>
             <a href="/forge" className="inline-block text-accent hover:underline">{d.forge.link} →</a>
           </div>
         </section>

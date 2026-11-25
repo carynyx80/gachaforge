@@ -1,27 +1,33 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FLAP_CUT_PCT, SPLIT, TAX_PCT } from '@/lib/economics';
-import { addToTotals, feeUsd, fetchFeeSummary, type FeeEvent, type FeeSummary, type FeeTotals } from '@/lib/fees';
+import { CREATOR_POT_MIN_BPS, CREATOR_SHARE_PCT, FLAP_CUT_PCT, GF_BUYBACK_PCT, GF_COMPANY_PCT, GF_SHARE_PCT, MACHINE_TAX_MAX_PCT, MACHINE_TAX_MIN_PCT } from '@/lib/economics';
+import { addToTotals, companyOf, feeUsd, fetchFeeSummary, type FeeEvent, type FeeSummary, type FeeTotals } from '@/lib/fees';
+import type { OffKey } from '@/lib/offchain-i18n';
+import { useOffT } from '../useOffchain';
 import { ago } from '@/lib/format';
 import { SectionTitle } from '../Scoreboard';
 import { useTween } from './AnimatedNumber';
 import { onFeeEvent, useLiveFees, usePrefersReducedMotion } from './useLiveFees';
 
-type BranchKey = 'flapUsd' | 'platformUsd' | 'potUsd' | 'buybackUsd';
-const BRANCHES: { k: BranchKey; label: string; sub: string; color: string }[] = [
-  { k: 'flapUsd', label: 'flap.sh', sub: `~${FLAP_CUT_PCT}% of tax`, color: '#8E9686' },
-  { k: 'platformUsd', label: 'GachaForge platform', sub: `${SPLIT.platform}% of rest`, color: '#F4F7EE' },
-  { k: 'potUsd', label: 'Gacha pot', sub: `${SPLIT.pot}% · real packs`, color: '#B6FF2E' },
-  { k: 'buybackUsd', label: '$FORGE buyback', sub: `${SPLIT.buyback}% · burned`, color: '#D4FF7A' },
+type BranchKey = 'flapUsd' | 'platformUsd' | 'buybackUsd' | 'potUsd' | 'creatorUsd';
+/** Machine-token model (TAX MODEL v3): creator tax → flap cut → GachaForge 10% (5 company / 5 $FORGE) → creator 90% (pot ≥20% / payout). */
+const BRANCHES: { k: BranchKey; label: OffKey; sub: OffKey; color: string }[] = [
+  { k: 'flapUsd', label: 'ff_flap', sub: 'ff_flap_sub', color: '#8E9686' },
+  { k: 'platformUsd', label: 'ff_company', sub: 'ff_company_sub', color: '#F4F7EE' },
+  { k: 'buybackUsd', label: 'ff_buyback', sub: 'ff_buyback_sub', color: '#D4FF7A' },
+  { k: 'potUsd', label: 'ff_pot', sub: 'ff_pot_sub', color: '#B6FF2E' },
+  { k: 'creatorUsd', label: 'ff_creator', sub: 'ff_creator_sub', color: '#3DDC97' },
 ];
+const VARS = { flap: FLAP_CUT_PCT, gf: GF_SHARE_PCT, gfco: GF_COMPANY_PCT, gfbb: GF_BUYBACK_PCT, cshare: CREATOR_SHARE_PCT, potmin: CREATOR_POT_MIN_BPS / 100, taxmin: MACHINE_TAX_MIN_PCT, taxmax: MACHINE_TAX_MAX_PCT };
+const evValue = (e: FeeEvent, k: BranchKey) => (k === 'platformUsd' ? companyOf(e) : k === 'creatorUsd' ? (e.creatorUsd ?? 0) : e[k]);
 
 const MAX_PER_SEC = 4;
 const DOT_MS = 1500;
 
 // ---- geometry (SVG user units) -------------------------------------------------
-const D = { w: 900, h: 400, bx: 515, bw: 375, bh: 82, cy: (i: number) => 50 + i * 100 };
-const dPath = (i: number) => `M85 200 H380 C455 200 445 ${D.cy(i)} ${D.bx} ${D.cy(i)}`;
-const M = { w: 360, h: 584, bx: 44, bw: 306, bh: 100, cy: (i: number) => 176 + i * 116 };
+const D = { w: 900, h: 470, bx: 515, bw: 375, bh: 78, cy: (i: number) => 45 + i * 95 };
+const dPath = (i: number) => `M85 235 H380 C455 235 445 ${D.cy(i)} ${D.bx} ${D.cy(i)}`;
+const M = { w: 360, h: 702, bx: 44, bw: 306, bh: 100, cy: (i: number) => 176 + i * 116 };
 const mPath = (i: number) => `M90 32 H270 V86 Q270 98 258 98 H36 Q24 98 24 110 V${M.cy(i) - 12} Q24 ${M.cy(i)} 36 ${M.cy(i)} H${M.bx}`;
 
 function Tw({ v }: { v: number | null }) {
@@ -32,14 +38,14 @@ function Tw({ v }: { v: number | null }) {
 interface Layout { svg: SVGSVGElement | null; paths: (SVGPathElement | null)[]; boxes: (SVGRectElement | null)[]; dots: SVGGElement | null }
 const newLayout = (): Layout => ({ svg: null, paths: [], boxes: [], dots: null });
 
-function Diagram({ mobile, totals, day, L }: { mobile: boolean; totals: FeeTotals | null; day: FeeTotals | null; L: Layout }) {
+function Diagram({ mobile, totals, day, L, t }: { mobile: boolean; totals: FeeTotals | null; day: FeeTotals | null; L: Layout; t: ReturnType<typeof useOffT> }) {
   const G = mobile ? M : D;
   const path = mobile ? mPath : dPath;
   const tax = totals ? totals.totalTaxUsd : null;
   const txt = { fill: 'var(--fg)' };
   return (
     <svg ref={(el) => { L.svg = el; }} viewBox={`0 0 ${G.w} ${G.h}`} className={mobile ? 'block w-full md:hidden' : 'hidden w-full md:block'} role="img"
-      aria-label={`Trade, ${TAX_PCT}% tax, split to flap.sh, GachaForge platform, gacha pot and $FORGE buyback`}>
+      aria-label={t('ff_aria', VARS)}>
       {BRANCHES.map((b, i) => (
         <g key={b.k}>
           <path d={path(i)} fill="none" stroke="#1F2419" strokeWidth={mobile ? 3 : 4} />
@@ -50,15 +56,15 @@ function Diagram({ mobile, totals, day, L }: { mobile: boolean; totals: FeeTotal
       {/* trade + tax nodes */}
       {(mobile
         ? [{ x: 10, y: 4, w: 160, h: 56 }, { x: 190, y: 4, w: 160, h: 56 }]
-        : [{ x: 10, y: 158, w: 150, h: 84 }, { x: 230, y: 158, w: 150, h: 84 }]
+        : [{ x: 10, y: 193, w: 150, h: 84 }, { x: 230, y: 193, w: 150, h: 84 }]
       ).map((r, j) => (
         <g key={j}>
           <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="4" fill={j ? '#B6FF2E' : '#0E0F0C'} stroke={j ? '#050505' : '#2B3322'} strokeWidth="2" />
           <text x={r.x + 14} y={r.y + (mobile ? 25 : 34)} className="font-display" fontSize={mobile ? 14 : 17} fontWeight="800" fill={j ? '#050505' : 'var(--fg)'}>
-            {j ? `${TAX_PCT}% TAX` : 'TRADE'}
+            {j ? t('ff_tax_node', VARS) : t('ff_trade')}
           </text>
           <text x={r.x + 14} y={r.y + (mobile ? 45 : 62)} className="font-mono" fontSize={mobile ? 11 : 13} fill={j ? '#050505' : 'var(--muted)'} fontWeight={j ? 700 : 400}>
-            {j ? <Tw v={tax} /> : 'buy or sell'}
+            {j ? <Tw v={tax} /> : t('ff_trade_sub')}
           </text>
         </g>
       ))}
@@ -73,17 +79,17 @@ function Diagram({ mobile, totals, day, L }: { mobile: boolean; totals: FeeTotal
             <rect x={x} y={y} width="5" height={G.bh} fill={b.color} />
             {mobile ? (
               <>
-                <text x={x + 16} y={y + 26} className="font-display" fontSize="13.5" fontWeight="800" style={txt}>{b.label}</text>
-                <text x={x + 16} y={y + 45} className="font-mono" fontSize="11" fill="var(--muted)">{b.sub}</text>
-                <text x={x + 16} y={y + 78} className="font-display" fontSize="19" fontWeight="800" fill={accent ? '#B6FF2E' : 'var(--fg)'}><Tw v={totals ? totals[b.k] : null} /></text>
-                <text x={x + G.bw - 14} y={y + 78} textAnchor="end" className="font-mono" fontSize="11" fill="var(--muted)">24h <Tw v={day ? day[b.k] : null} /></text>
+                <text x={x + 16} y={y + 26} className="font-display" fontSize="13.5" fontWeight="800" style={txt}>{t(b.label)}</text>
+                <text x={x + 16} y={y + 45} className="font-mono" fontSize="11" fill="var(--muted)">{t(b.sub, VARS)}</text>
+                <text x={x + 16} y={y + 78} className="font-display" fontSize="19" fontWeight="800" fill={accent ? '#B6FF2E' : 'var(--fg)'}><Tw v={totals ? (totals[b.k] ?? 0) : null} /></text>
+                <text x={x + G.bw - 14} y={y + 78} textAnchor="end" className="font-mono" fontSize="11" fill="var(--muted)">24h <Tw v={day ? (day[b.k] ?? 0) : null} /></text>
               </>
             ) : (
               <>
-                <text x={x + 20} y={y + 30} className="font-display" fontSize="15" fontWeight="800" style={txt}>{b.label}</text>
-                <text x={x + G.bw - 16} y={y + 30} textAnchor="end" className="font-mono" fontSize="12" fill="var(--muted)">{b.sub}</text>
-                <text x={x + 20} y={y + 64} className="font-display" fontSize="21" fontWeight="800" fill={accent ? '#B6FF2E' : 'var(--fg)'}><Tw v={totals ? totals[b.k] : null} /></text>
-                <text x={x + G.bw - 16} y={y + 64} textAnchor="end" className="font-mono" fontSize="12" fill="var(--muted)">24h <Tw v={day ? day[b.k] : null} /></text>
+                <text x={x + 20} y={y + 30} className="font-display" fontSize="15" fontWeight="800" style={txt}>{t(b.label)}</text>
+                <text x={x + G.bw - 16} y={y + 30} textAnchor="end" className="font-mono" fontSize="12" fill="var(--muted)">{t(b.sub, VARS)}</text>
+                <text x={x + 20} y={y + 64} className="font-display" fontSize="21" fontWeight="800" fill={accent ? '#B6FF2E' : 'var(--fg)'}><Tw v={totals ? (totals[b.k] ?? 0) : null} /></text>
+                <text x={x + G.bw - 16} y={y + 64} textAnchor="end" className="font-mono" fontSize="12" fill="var(--muted)">24h <Tw v={day ? (day[b.k] ?? 0) : null} /></text>
               </>
             )}
           </g>
@@ -97,6 +103,7 @@ const NS = 'http://www.w3.org/2000/svg';
 const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
 export function FeeFlow() {
+  const t = useOffT();
   const reduce = usePrefersReducedMotion();
   const { events, seeded, connected } = useLiveFees(undefined, 8);
   const [summary, setSummary] = useState<FeeSummary | null>(null);
@@ -146,7 +153,7 @@ export function FeeFlow() {
       const path = L.paths[i];
       if (!path) return;
       const el = document.createElementNS(NS, 'circle');
-      const amt = Math.max(0, e[b.k]);
+      const amt = Math.max(0, evValue(e, b.k));
       el.setAttribute('r', String(Math.min(7, 3 + Math.sqrt(amt) * 2.2)));
       el.setAttribute('fill', b.color);
       el.setAttribute('opacity', '0');
@@ -178,33 +185,33 @@ export function FeeFlow() {
 
   const totals = summary;
   const day = summary?.last24h ?? null;
-  const status = connected ? (seeded || summary ? 'live' : 'waiting for fee feed') : 'connecting';
+  const status = connected ? (seeded || summary ? 'live' : 'waiting') : 'connecting';
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-16">
       <SectionTitle right={
         <span className="flex items-center gap-2 font-mono text-[11px] uppercase text-muted">
-          <span className={`h-2 w-2 rounded-full ${status === 'live' ? 'animate-pulse bg-accent' : 'bg-muted/60'}`} />{status}
+          <span className={`h-2 w-2 rounded-full ${status === 'live' ? 'animate-pulse bg-accent' : 'bg-muted/60'}`} />{t(status === 'live' ? 'ff_live' : status === 'waiting' ? 'ff_waiting_feed' : 'ff_connecting')}
         </span>
-      }>Where the fees go</SectionTitle>
+      }>{t('ff_title')}</SectionTitle>
       <div className="grid gap-4 lg:grid-cols-[1.75fr_1fr]">
         <div className="panel panel-strong min-w-0 p-3 sm:p-5">
           <p className="mb-3 max-w-xl text-sm text-muted">
-            Every buy and sell pays a fixed {TAX_PCT}% tax. flap.sh keeps ~{FLAP_CUT_PCT}%; the rest splits {SPLIT.platform}% / {SPLIT.pot}% / {SPLIT.buyback}%.
-            {!reduce && ' Each dot is a real trade.'}
+            {t('ff_intro', VARS)}
+            {!reduce && ` ${t('ff_dots')}`}
           </p>
-          <Diagram mobile={false} totals={totals} day={day} L={layouts.current[0]} />
-          <Diagram mobile totals={totals} day={day} L={layouts.current[1]} />
-          <div className="mt-2 text-right font-mono text-[10px] text-muted">all-time · 24h {summary ? '' : '· totals load when the fee API answers'}</div>
+          <Diagram mobile={false} totals={totals} day={day} L={layouts.current[0]} t={t} />
+          <Diagram mobile totals={totals} day={day} L={layouts.current[1]} t={t} />
+          <div className="mt-2 text-right font-mono text-[10px] text-muted">{t('ff_alltime')}{summary ? '' : ` · ${t('ff_totals_wait')}`}</div>
         </div>
 
         <div className="panel panel-strong min-w-0 overflow-hidden">
           <div className="flex items-center justify-between border-b-2 border-line px-4 py-3">
-            <h3 className="font-display text-sm font-extrabold uppercase">Live fees</h3>
-            <span className="font-mono text-[10px] uppercase text-muted">tax · pot share</span>
+            <h3 className="font-display text-sm font-extrabold uppercase">{t('ff_live_fees')}</h3>
+            <span className="font-mono text-[10px] uppercase text-muted">{t('ff_cols')}</span>
           </div>
           {events.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted">{seeded ? 'Waiting for the next trade…' : 'Fee feed is warming up…'}</div>
+            <div className="px-4 py-10 text-center text-sm text-muted">{seeded ? t('ff_wait_trade') : t('ff_warming')}</div>
           ) : (
             <ul className="divide-y divide-line font-mono text-xs">
               {events.map((e) => (
@@ -214,7 +221,7 @@ export function FeeFlow() {
                     <span className={`font-bold ${e.side === 'BUY' ? 'text-success' : 'text-danger'}`}>{e.side}</span>
                     {e.pending && <span className="ml-1.5 text-[10px] text-muted" title="pending vault sync">◌</span>}
                   </span>
-                  <span className="text-right">{feeUsd(e.taxUsd)} <span className="text-accent">→ {feeUsd(e.potUsd)}</span></span>
+                  <span className="whitespace-nowrap text-right">{feeUsd(e.taxUsd)} <span className="text-accent">→ {feeUsd(e.potUsd)}</span>{(e.creatorUsd ?? 0) > 0 && <span className="text-success"> · {feeUsd(e.creatorUsd ?? 0)}</span>}</span>
                   <span className="w-8 text-right text-muted">{ago(e.timestamp)}</span>
                 </li>
               ))}

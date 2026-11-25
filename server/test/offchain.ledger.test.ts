@@ -42,11 +42,11 @@ describe('offchain ledger math', () => {
 });
 
 describe('offchain ledger: trades → entries → reconcile', () => {
-  it('indexes trades into pending FeeEvents + pot; dispatch receipts reconcile and update the measured share', async () => {
+  it('legacy (pre-v3) registration: indexes trades into pending FeeEvents + pot at 2% / 90-7-3; dispatch receipts reconcile and update the measured share', async () => {
     const h = harness();
     const msgs: WsMessage[] = [];
     h.bus.subscribe((m) => msgs.push(m));
-    await machine(h, 'RAFFLE');
+    await machine(h, 'RAFFLE', 0, undefined, { legacy: true });
     const apply = (logs: any[]) => h.svc.indexer.apply(logs, [TOKEN], true);
     await apply([buyLog(E18, 1), buyLog(2n * E18, 2), transferLog('0x0000000000000000000000000000000000000000', BOB, 5n * 10n ** 24n, 1)]);
     // replay is a no-op (idempotent refs; holders aren't double counted because the cursor moved on)
@@ -74,6 +74,7 @@ describe('offchain ledger: trades → entries → reconcile', () => {
     const potDiff = (await h.accounts.potWei(TOKEN)) - (received * 700n) / 10_000n;
     expect(potDiff < 10n && potDiff > -10n).toBe(true); // rounding wei only
     expect(await h.accounts.shareBps()).toBe(9200);
+    expect(await h.accounts.shareBps(await h.store.getRegistration(TOKEN))).toBe(9200); // per token
     expect((await h.repo.listFeeEvents({ limit: 10 })).every((f) => !f.pending)).toBe(true);
     const reg = (await h.store.getRegistration(TOKEN))!;
     expect(reg.sentToTreasuryWei).toBe(received.toString());

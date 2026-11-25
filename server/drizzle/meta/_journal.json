@@ -36,6 +36,13 @@
       "when": 1795634767537,
       "tag": "0004_offchain",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795638836564,
+      "tag": "0005_tax_v3",
+      "breakpoints": true
     }
   ]
 }

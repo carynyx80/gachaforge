@@ -10,7 +10,7 @@ Off-chain mode (SPEC "OFF-CHAIN MODE") uses no GachaForge contracts. Each machin
 ## Money flow
 
 1. **Launch.** The creator calls `Portal.newTokenV6` with these settings:
-   - tax 200/200
+   - buy and sell tax chosen by the creator, each 100–1000 bps in whole % (TAX MODEL v3)
    - `beneficiary = TREASURY_ADDRESS`, `mktBps = 10000`
    - no commission receiver
    - native BNB quote
@@ -23,20 +23,27 @@ Off-chain mode (SPEC "OFF-CHAIN MODE") uses no GachaForge contracts. Each machin
    pack:<PACK>
    strategy:<STRATEGY>
    split:<dividendBps>/<burnBps>/<lpBps>   (0/0/0 unless SPLIT)
+   buyTaxBps:<100–1000>
+   sellTaxBps:<100–1000>
+   potShareBps:<2000–10000>               (pot share of the creator share)
+   payout:<lowercase payout address>      (default: the launch wallet)
    chainId:56
    ```
-   and calls `POST /api/machines/register { txHash, pack, strategy, split?, signature }`. A signature that does not recover to the tx's `from` is rejected with `bad_signature` (401). The backend rejects the registration with a clear error code unless all of these hold:
+   and calls `POST /api/machines/register { txHash, pack, strategy, split?, buyTaxBps, sellTaxBps, potShareBps, payout?, signature }`. Older clients that send none of the four tax fields sign the pre-v3 message (no tax lines) and get the auto-registration defaults. A signature that does not recover to the tx's `from` is rejected with `bad_signature` (401). The backend rejects the registration with a clear error code unless all of these hold:
    - the receipt contains a Portal `TokenCreated`
-   - `getTokenV8Safe` shows tax 200/200 and a BNB quote
+   - `getTokenV8Safe` shows a buy/sell tax of 1–10% (whole %) equal to the signed `buyTaxBps`/`sellTaxBps`, and a BNB quote
    - `taxProcessor().marketAddress()` equals `TREASURY_ADDRESS`
    - `commissionReceiver()` is `0x0`
 
-   The error codes are `bad_signature`, `tx_not_found`, `tx_reverted`, `no_token_created`, `bad_tax`, `bad_quote`, `wrong_recipient`, `commission_set`, `already_registered` and `forge_token`. Pack and strategy are immutable after registration. A launch whose tax goes to the treasury but that is not registered within `AUTO_REGISTER_DELAY_SEC` (default 600 s) is registered automatically as FORGE_28 / RAFFLE.
+   The error codes are `invalid_params` (bad tax / pot share / payout values), `bad_signature`, `tx_not_found`, `tx_reverted`, `no_token_created`, `bad_tax`, `bad_quote`, `wrong_recipient`, `commission_set`, `already_registered` and `forge_token`. Pack, strategy, split, tax rates, pot share and payout address are immutable after registration. A launch whose tax goes to the treasury but that is not registered within `AUTO_REGISTER_DELAY_SEC` (default 600 s) is registered automatically as FORGE_28 / RAFFLE with its on-chain tax rates, `potShareBps` 10000 (the whole creator share goes to the pot) and payout = the launch tx sender.
+
+   **$FORGE** is registered automatically as a machine once it is discovered, if its tax recipient is `TREASURY_ADDRESS`, with `FORGE_PACK` / `FORGE_STRATEGY` and the $FORGE split (below). Any tax rate is accepted for it. If its tax goes elsewhere it stays display/trade-only.
 2. **Indexing.** One shared log scanner covers all tokens. It reads Portal `TokenBought`/`TokenSold`, PancakeSwap pair `Swap` after graduation, `Transfer` for holder balances, and `LaunchedToDEX`. It uses adaptive block ranges and batched address filters.
 3. **Ledger.** The `ledger_entries` table is append-only; a Postgres trigger rejects UPDATE and DELETE. Each trade books these entries:
-   - **TAX:** 2% of the trade.
-   - **FLAP:** flap.sh's cut. Until real receipts are measured it is estimated at `FLAP_CUT_ESTIMATE_BPS`.
-   - **The rest:** PLATFORM 90%, POT 7% (for that machine), BUYBACK 3%.
+   - **TAX:** the trade × that side's tax (`buyTaxBps` for buys, `sellTaxBps` for sells).
+   - **FLAP:** flap.sh's cut, from the token's own measured treasury share (falls back to the global measured share, then to `FLAP_CUT_ESTIMATE_BPS`).
+   - **The rest (creator machines, TAX MODEL v3):** PLATFORM (company) 5%, BUYBACK 5%, and the 90% creator share split into POT (`potShareBps`) and CREATOR (the rest, owed to the payout address).
+   - **The rest ($FORGE, and machines registered before v3):** PLATFORM 90%, POT 7%, BUYBACK 3%. Pre-v3 registrations keep this split; nothing is changed retroactively.
 
    Each trade's FeeEvent stays `pending` until a dispatch is seen. The keeper calls `TaxProcessor.dispatch()` when gas is at most `DISPATCH_MAX_GAS_PCT` of the pending tax. It then reads the cumulative `totalQuoteSentToMarketing()`, which is the BNB that really reached the treasury, books `RECONCILE` corrections, settles the FeeEvents and stores the measured treasury share. Later estimates use that measured share. On the mainnet fork it was 9052 bps, so flap.sh keeps about 9.5% of the tax.
 4. **Pull.** When the virtual pot is at least the pack price (Chainlink BNB/USD), the ops wallet does the following:
@@ -45,7 +52,8 @@ Off-chain mode (SPEC "OFF-CHAIN MODE") uses no GachaForge contracts. Each machin
    3. Debits the pot by the BNB the swap actually spent.
 
    Only one pull runs per machine at a time, with a `PULL_COOLDOWN_SEC` cooldown. Holders are snapshotted from indexed balances at the token's synced block. When the RPC serves that block, the balances are checked with `balanceOf` multicalls. Proofs are published at `/api/raffles/:pullId`.
-5. **Strategies:**
+5. **Creator payouts.** Every `CREATOR_PAYOUT_INTERVAL_MS` the ops wallet sends each creator's whole CREATOR balance to its payout address once it is at least `CREATOR_PAYOUT_MIN_BNB`. The debit is booked before sending and reversed if nothing was sent, so a payout never exceeds the ledger balance and is never paid twice. Payouts are `ops_txs` kind `CREATOR_PAYOUT`; they are exempt from `OPS_DAILY_CAP_BNB` and not counted in it. Machines expose `creatorOwedBnb` / `creatorPaidBnb`.
+6. **Strategies:**
 
    | Strategy | What happens |
    |---|---|
@@ -56,7 +64,7 @@ Off-chain mode (SPEC "OFF-CHAIN MODE") uses no GachaForge contracts. Each machin
    | SPLIT | Dividend/burn in the creator's ratio; the LP share is burned. |
 
    Dividend payouts are queued and sent in batches of `DIVIDEND_BATCH_SIZE`. Shares below `DIVIDEND_MIN_BNB` stay in the DIVIDEND bucket for the next round. When the BUYBACK ledger reaches `BUYBACK_MIN_BNB` and $FORGE has been discovered, the ops wallet buys $FORGE and sends it to dead.
-6. **Sweep (optional).** This needs `SWEEP_TO_ADDRESS` set and the ops wallet to be the treasury. The keeper moves `min(platform share, balance − owed − OPS_RESERVE_BNB)` to the cold wallet. Owed means pots + buyback + pending dividends + pending burns.
+7. **Sweep (optional).** This needs `SWEEP_TO_ADDRESS` set and the ops wallet to be the treasury. The keeper moves `min(platform share, balance − owed − OPS_RESERVE_BNB)` to the cold wallet. Owed means pots + creator balances + buyback + pending dividends + pending burns (`/api/transparency → owed`, incl. `owed.creators`), so the sweep never moves creator money.
 
 Pots are virtual: the BNB sits in the treasury or ops wallet. The pot includes tax that has not been dispatched yet (an estimate), so the ops wallet pays for a pull before flap.sh has dispatched the tax.
 
@@ -72,7 +80,7 @@ The ops wallet balance should be at least the total owed plus `OPS_RESERVE_BNB`.
 
 **Ops wallet ≠ treasury.** The tax still lands in the treasury, so the ops wallet must be topped up from it. Suggested rule, done by hand or by a cron on the treasury side, never by this server: when `coverageBnb < OPS_RESERVE_BNB`, send `owed.total + 2 × OPS_RESERVE_BNB − ops.balanceBnb`. `SWEEP_TO_ADDRESS` is ignored in this setup.
 
-**Ops wallet = treasury.** Nothing needs topping up. Use `SWEEP_TO_ADDRESS` to move the 90% platform share to cold storage.
+**Ops wallet = treasury.** Nothing needs topping up. Use `SWEEP_TO_ADDRESS` to move the company (platform) share to cold storage.
 
 Without `OPS_PRIVATE_KEY` the server runs read-only:
 - everything is indexed and booked;
@@ -88,11 +96,11 @@ A key with no `DATABASE_URL` is ignored. Pots, the payout queue and the daily ca
 | `MODE` | auto | `offchain`, `vault` or `mock` |
 | `RPC_URL` | public BSC | BSC RPC. An archive RPC is not required. A paid RPC is recommended for volume. |
 | `CHAIN_ID` | 56 | 97 needs `RPC_URL` |
-| `DATABASE_URL` | none | Postgres. Required for a signing ops wallet. Tables: `offchain_machines`, `ledger_entries`, `ops_txs`. |
+| `DATABASE_URL` | none | Postgres. Required for a signing ops wallet. Tables: `offchain_machines`, `ledger_entries`, `ops_txs`. Migration `0005_tax_v3` adds `fee_events.creator_usd` (default 0) and an `ops_txs(kind, machine)` index. |
 | `TREASURY_ADDRESS` | company wallet | Must be every machine's tax recipient |
 | `OPS_PRIVATE_KEY` | none | Ops hot wallet. Unset means read-only. |
 | `OPS_PAUSED` | false | Kill switch |
-| `OPS_DAILY_CAP_BNB` | 1 | Rolling 24 h of value + gas leaving the ops wallet. Sweeps are excluded. |
+| `OPS_DAILY_CAP_BNB` | 1 | Rolling 24 h of value + gas leaving the ops wallet. Sweeps and creator payouts are excluded. |
 | `OPS_RESERVE_BNB` | 0.05 | Gas buffer that the sweep never touches |
 | `OPS_PULL_BUFFER_BPS` | 1000 | Per-pull cap: pack price + 10% |
 | `OPS_TX_RETRIES` / `OPS_TX_TIMEOUT_MS` | 3 / 180000 | Send retries on transient or nonce errors; receipt wait |
@@ -104,6 +112,9 @@ A key with no `DATABASE_URL` is ignored. Pots, the payout queue and the daily ca
 | `AUTO_REGISTER_DELAY_SEC` | 600 | |
 | `SWEEP_TO_ADDRESS` / `SWEEP_INTERVAL_MS` / `SWEEP_MIN_BNB` | none / 6 h / 0.05 | |
 | `FLAP_CUT_ESTIMATE_BPS` | 1000 | Used until a dispatch has been measured |
+| `CREATOR_PAYOUT_MIN_BNB` | 0.01 | A creator's owed balance is paid out once it reaches this |
+| `CREATOR_PAYOUT_INTERVAL_MS` | 60000 | How often creator payouts are checked |
+| `FORGE_PACK` / `FORGE_STRATEGY` | FORGE_28 / RAFFLE | Pack and strategy of the $FORGE machine. Set before $FORGE is discovered; fixed after. SPLIT is not allowed. |
 | `LOGS_ADDRESS_BATCH` / `LOGS_MAX_RANGE` | 50 / 2000 | Public RPC limits |
 | `START_BLOCK` | head at first boot | Where the shared scanner starts. Registered tokens always backfill from their own creation block. |
 | `INDEXER_POLL_MS` / `OPERATOR_POLL_MS` / `KEEPER_POLL_MS` | 3 s / 5 s / 60 s | |

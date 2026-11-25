@@ -1,13 +1,15 @@
 /**
- * OFF-CHAIN MODE jobs (SPEC "OFF-CHAIN MODE"): registration, pulls, strategy payouts, burns, $FORGE buyback,
- * TaxProcessor dispatch + reconciliation, auto-registration and the optional platform sweep.
+ * OFF-CHAIN MODE jobs (SPEC "OFF-CHAIN MODE" + "TAX MODEL v3"): registration ($FORGE included), pulls, strategy payouts,
+ * creator payouts, burns, $FORGE buyback, TaxProcessor dispatch + reconciliation, auto-registration and the optional
+ * platform sweep.
  * All value moves go through OpsWallet (caps, pause, lock, ops_txs records); all accounting through OffchainLedger.
  */
 import { encodeFunctionData, erc20Abi, parseEventLogs, verifyMessage, type Hex } from 'viem';
 import { registerMessage } from './message.js';
 import { portalAbi, portalOpsAbi } from '../abi/flap.js';
 import { taxProcessorAbi } from '../abi/token.js';
-import { PACK_PRICE_USD, TOTAL_SUPPLY_DEFAULT, proRata, selectAutoPush, splitProceeds, type HolderBalance } from '../core/index.js';
+import { CREATOR_POT_MAX_BPS, CREATOR_POT_MIN_BPS, isValidPotShareBps, isValidTaxBps, PACK_PRICE_USD, TOTAL_SUPPLY_DEFAULT, proRata, selectAutoPush, splitProceeds, type HolderBalance } from '../core/index.js';
+import type { ForgeToken } from '../forge/types.js';
 import { fetchFlapMetadata } from '../forge/metadata.js';
 import { excludedFor } from '../indexer/excluded.js';
 import { fmtTokens, round2 } from '../ledger.js';
@@ -19,7 +21,7 @@ import { usdtToBuy, type Swapper } from '../swap/pancake.js';
 import type { Machine, PackId, Strategy } from '../types.js';
 import type { OffchainIndexer } from './indexer.js';
 import { usdToWei, weiToBnb, weiToUsd, type OffchainLedger } from './ledger.js';
-import { isHold, type OpsWallet } from './ops.js';
+import { isHold, OpsTxError, type OpsWallet } from './ops.js';
 import { RegistrationError, verifyLaunchTx, type ChainReader, type VerifiedLaunch } from './register.js';
 import type { OffchainStore } from './store.js';
 import type { LedgerEntry, PendingPayout, Registration } from './types.js';
@@ -58,6 +60,11 @@ export interface EngineConfig {
   forgeDeployer?: string;
   ipfsGateway: string;
   renaissReady: boolean;
+  /** Creator payouts run once a creator's owed balance ≥ this (CREATOR_PAYOUT_MIN_BNB). */
+  creatorPayoutMinWei: bigint;
+  /** $FORGE auto-registration (FORGE_PACK / FORGE_STRATEGY). */
+  forgePack: PackId;
+  forgeStrategy: Strategy;
 }
 
 /** Chain reads the engine needs (viem PublicClient fits). */
@@ -79,6 +86,8 @@ export interface EngineDeps {
   bnbUsd: () => Promise<number>;
   /** Discovered $FORGE address (null while waiting). */
   forgeToken: () => Promise<string | null>;
+  /** Discovered $FORGE token (for auto-registration as a machine when its tax goes to the treasury). */
+  forgeInfo?: () => Promise<ForgeToken | null>;
   log: Logger;
   now?: () => number;
   fetch?: typeof fetch;
@@ -89,9 +98,31 @@ export interface RegisterParams {
   pack: PackId;
   strategy: Strategy;
   split?: { dividendBps: number; burnBps: number; lpBps: number };
+  /** TAX MODEL v3: must equal the token's on-chain tax (100–1000 bps, whole %). */
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  /** Pot share of the creator share, 2000–10000 bps. */
+  potShareBps?: number;
+  /** Creator payout address; default = launch tx sender. */
+  payout?: string;
   /** EIP-191 personal_sign by the launch tx sender over registerMessage(...). */
   signature: string;
 }
+
+/** What adopt() stores (immutable once registered). */
+export interface AdoptParams {
+  pack: PackId;
+  strategy: Strategy;
+  split?: { dividendBps: number; burnBps: number; lpBps: number };
+  /** Default 'creator'. */
+  taxModel?: 'creator' | 'forge';
+  /** 'creator' only; default 10000 (all of the creator share to the pot). */
+  potShareBps?: number;
+  /** 'creator' only; default = launch tx sender. */
+  payout?: string;
+}
+
+const ADDR = /^0x[0-9a-fA-F]{40}$/;
 
 /** What the sweep may move: platform share, minus everything owed and the gas reserve, never more than the balance. */
 export function sweepableWei(p: { balanceWei: bigint; platformWei: bigint; owedWei: bigint; reserveWei: bigint }): bigint {
@@ -146,28 +177,62 @@ export class OffchainEngine {
       if (!s || [s.dividendBps, s.burnBps, s.lpBps].some((x) => !Number.isInteger(x) || x < 0) || s.dividendBps + s.burnBps + s.lpBps !== 10_000)
         throw new RegistrationError('invalid_params', 'SPLIT needs split { dividendBps, burnBps, lpBps } summing to 10000', 400);
     }
+    // v3 request: the creator signs tax rates + pot share + payout. Pre-v3 clients (none of them) sign the old message
+    // and get the auto-registration defaults (on-chain tax, everything to the pot, payout = launch wallet).
+    const v3 = p.buyTaxBps !== undefined || p.sellTaxBps !== undefined || p.potShareBps !== undefined || p.payout !== undefined;
+    if (v3) {
+      if (p.buyTaxBps === undefined || p.sellTaxBps === undefined || p.potShareBps === undefined)
+        throw new RegistrationError('invalid_params', 'buyTaxBps, sellTaxBps and potShareBps are all required', 400);
+      if (!isValidTaxBps(p.buyTaxBps) || !isValidTaxBps(p.sellTaxBps))
+        throw new RegistrationError('invalid_params', 'buyTaxBps / sellTaxBps must each be 100–1000 in whole % (1%–10%)', 400, { buyTaxBps: p.buyTaxBps, sellTaxBps: p.sellTaxBps });
+      if (!isValidPotShareBps(p.potShareBps))
+        throw new RegistrationError('invalid_params', `potShareBps must be ${CREATOR_POT_MIN_BPS}–${CREATOR_POT_MAX_BPS} (at least 20% of the creator share goes to the gacha pot)`, 400, { potShareBps: p.potShareBps });
+      if (p.payout !== undefined && (!ADDR.test(p.payout) || eq(p.payout, ZERO))) throw new RegistrationError('invalid_params', 'payout must be a non-zero 0x address', 400);
+    }
     if (!/^0x[0-9a-fA-F]+$/.test(p.signature ?? '')) throw new RegistrationError('bad_signature', 'signature (personal_sign by the launch tx sender) is required', 400);
-    const v = await verifyLaunchTx(this.d.client, { txHash: p.txHash, portal: this.cfg.portal, treasury: this.cfg.treasury });
-    const message = registerMessage({ token: v.token, pack: p.pack, strategy: p.strategy, split: p.split, chainId: this.cfg.chainId });
+    const v = await verifyLaunchTx(this.d.client, { txHash: p.txHash, portal: this.cfg.portal, treasury: this.cfg.treasury, ...(v3 ? { tax: { buyTaxBps: p.buyTaxBps, sellTaxBps: p.sellTaxBps } } : {}) });
+    const payout = lc(p.payout ?? v.txFrom);
+    const message = registerMessage({
+      token: v.token,
+      pack: p.pack,
+      strategy: p.strategy,
+      split: p.split,
+      ...(v3 ? { buyTaxBps: p.buyTaxBps, sellTaxBps: p.sellTaxBps, potShareBps: p.potShareBps, payout } : {}),
+      chainId: this.cfg.chainId,
+    });
     const ok = await verifyMessage({ address: v.txFrom as Hex, message, signature: p.signature as Hex }).catch(() => false);
     if (!ok) throw new RegistrationError('bad_signature', `signature is not from the launch tx sender ${v.txFrom} over the registration message`, 401, { expectedSigner: v.txFrom, message });
-    return this.adopt(v, p, by);
+    return this.adopt(v, { pack: p.pack, strategy: p.strategy, split: p.split, taxModel: 'creator', potShareBps: v3 ? p.potShareBps : CREATOR_POT_MAX_BPS, payout }, by);
   }
 
-  /** Persists a verified launch. pack/strategy/split are immutable: a second registration must match exactly. */
-  async adopt(v: VerifiedLaunch, p: Omit<RegisterParams, 'txHash' | 'signature'>, by: 'api' | 'auto'): Promise<{ machine: Machine; created: boolean }> {
-    const forge = await this.d.forgeToken().catch(() => null);
-    if (eq(forge, v.token) || (this.cfg.forgeDeployer && eq(v.creator, this.cfg.forgeDeployer) && by === 'auto'))
-      throw new RegistrationError('forge_token', '$FORGE is the platform token, not a gacha machine', 409);
+  /**
+   * Persists a verified launch. Pack, strategy, split, tax rates, pot share and payout are immutable: a second
+   * registration must match exactly.
+   */
+  async adopt(v: VerifiedLaunch, p: AdoptParams, by: 'api' | 'auto' | 'forge'): Promise<{ machine: Machine; created: boolean }> {
+    const model = p.taxModel ?? 'creator';
+    if (by !== 'forge') {
+      const forge = await this.d.forgeToken().catch(() => null);
+      if (eq(forge, v.token) || (this.cfg.forgeDeployer && eq(v.creator, this.cfg.forgeDeployer) && by === 'auto'))
+        throw new RegistrationError('forge_token', '$FORGE is the platform token, not a gacha machine', 409);
+    }
     const split = p.strategy === 'SPLIT' ? p.split : undefined;
+    const potShareBps = model === 'creator' ? (p.potShareBps ?? CREATOR_POT_MAX_BPS) : undefined;
+    const payout = model === 'creator' ? lc(p.payout ?? v.txFrom) : undefined;
     const existing = await this.d.store.getRegistration(v.token);
     if (existing) {
-      const same = existing.pack === p.pack && existing.strategy === p.strategy && JSON.stringify(existing.split ?? null) === JSON.stringify(split ?? null);
+      const v3 = !!existing.taxModel && existing.taxModel !== 'legacy';
+      const same =
+        existing.pack === p.pack &&
+        existing.strategy === p.strategy &&
+        JSON.stringify(existing.split ?? null) === JSON.stringify(split ?? null) &&
+        (!v3 || (existing.taxModel === model && existing.potShareBps === potShareBps && (existing.payout ?? undefined) === payout));
       if (!same)
         throw new RegistrationError('already_registered', `machine already registered with ${existing.pack}/${existing.strategy}; registration is immutable`, 409, {
           pack: existing.pack,
           strategy: existing.strategy,
           split: existing.split ?? null,
+          ...(v3 ? { potShareBps: existing.potShareBps ?? null, payout: existing.payout ?? null } : {}),
         });
       return { machine: (await this.repo.getMachine(v.token))!, created: false };
     }
@@ -184,6 +249,11 @@ export class OffchainEngine {
       ...(split ? { split } : {}),
       registeredBy: by,
       registeredAt: now,
+      taxModel: model,
+      buyTaxBps: v.buyTaxBps,
+      sellTaxBps: v.sellTaxBps,
+      ...(potShareBps !== undefined ? { potShareBps } : {}),
+      ...(payout ? { payout } : {}),
       ...(v.pool ? { pool: v.pool } : {}),
       syncedTo: v.createdBlock - 1,
       sentToTreasuryWei: '0',
@@ -222,14 +292,48 @@ export class OffchainEngine {
       burnedTokens: 0,
       ...(meta?.links ? { links: meta.links } : {}),
       pullQueued: false,
+      buyTaxBps: v.buyTaxBps,
+      sellTaxBps: v.sellTaxBps,
+      taxModel: model,
+      ...(potShareBps !== undefined ? { potShareBps } : {}),
+      ...(payout ? { creatorPayout: payout, creatorPaidBnb: 0, creatorOwedBnb: 0 } : {}),
     };
     await this.d.store.saveRegistration(reg);
     await this.ledger.launch(m);
-    this.d.log.info({ token: v.token, pack: p.pack, strategy: p.strategy, by, createdBlock: v.createdBlock }, 'machine registered (offchain)');
+    this.d.log.info({ token: v.token, pack: p.pack, strategy: p.strategy, by, model, buyTaxBps: v.buyTaxBps, sellTaxBps: v.sellTaxBps, potShareBps, payout, createdBlock: v.createdBlock }, 'machine registered (offchain)');
     return { machine: (await this.repo.getMachine(v.token))!, created: true };
   }
 
-  /** Portal TokenCreated with tax → treasury, unregistered after AUTO_REGISTER_DELAY_SEC → register FORGE_28 / RAFFLE. */
+  /**
+   * $FORGE (SPEC "TAX MODEL v3" B): once discovered, if its tax recipient is the treasury, register it as a machine with
+   * the $FORGE split (90% company / 7% pot / 3% buyback), FORGE_PACK / FORGE_STRATEGY. Otherwise display/trade-only.
+   */
+  async tickForgeRegister() {
+    const t = await this.d.forgeInfo?.().catch(() => null);
+    if (!t?.address) return null;
+    if (await this.d.store.getRegistration(t.address)) return null;
+    if (!eq(t.taxRecipient, this.cfg.treasury)) {
+      this.warnOnce(`forge-recipient:${t.address}:${t.taxRecipient}`, { forge: t.address, taxRecipient: t.taxRecipient ?? null, treasury: this.cfg.treasury }, '$FORGE tax recipient is not the treasury: display/trade-only (not registered as a machine)');
+      return null;
+    }
+    if (!t.createdTx) {
+      this.warnOnce(`forge-notx:${t.address}`, { forge: t.address }, '$FORGE creation tx unknown: cannot auto-register it as a machine');
+      return null;
+    }
+    try {
+      const v = await verifyLaunchTx(this.d.client, { txHash: t.createdTx, portal: this.cfg.portal, treasury: this.cfg.treasury, tax: { anyRate: true } });
+      if (!eq(v.token, t.address)) return null;
+      return await this.adopt(v, { pack: this.cfg.forgePack, strategy: this.cfg.forgeStrategy, taxModel: 'forge' }, 'forge');
+    } catch (err) {
+      this.warnOnce(`forge-reg:${t.address}:${err instanceof RegistrationError ? err.code : 'rpc'}`, { err: errMsg(err), forge: t.address }, '$FORGE auto-registration failed');
+      return null;
+    }
+  }
+
+  /**
+   * Portal TokenCreated with tax → treasury, unregistered after AUTO_REGISTER_DELAY_SEC → register FORGE_28 / RAFFLE with
+   * the on-chain tax rates, potShare 10000 (all of the creator share to the pot) and payout = launch tx sender.
+   */
   async tickAutoRegister() {
     const cands = await this.d.indexer.candidates();
     if (!cands.length) return;
@@ -244,7 +348,7 @@ export class OffchainEngine {
       try {
         const v = await verifyLaunchTx(this.d.client, { txHash: c.txHash, portal: this.cfg.portal, treasury: this.cfg.treasury });
         if (!eq(v.token, c.token)) continue;
-        await this.adopt(v, { pack: 'FORGE_28', strategy: 'RAFFLE' }, 'auto');
+        await this.adopt(v, { pack: 'FORGE_28', strategy: 'RAFFLE', taxModel: 'creator', potShareBps: CREATOR_POT_MAX_BPS, payout: v.txFrom }, 'auto');
       } catch (err) {
         // not ours (other recipient / tax) or the $FORGE token: drop. RPC trouble: retry next round.
         if (!(err instanceof RegistrationError)) keep.push(c);
@@ -596,8 +700,13 @@ export class OffchainEngine {
         if (sent === null) continue; // state at that block unavailable: next round
         if (sent <= BigInt(r.sentToTreasuryWei || '0')) continue;
         const res = await this.accounts.reconcile(r, sent);
-        await this.d.store.saveRegistration({ ...(await this.d.store.getRegistration(r.token))!, sentToTreasuryWei: r.sentToTreasuryWei, reconciledToEntryId: r.reconciledToEntryId });
-        if (res) this.d.log.info({ token: r.token, receivedWei: res.receivedWei.toString(), grossWei: res.grossWei.toString(), shareBps: await this.accounts.shareBps() }, 'tax reconciled with treasury receipts');
+        await this.d.store.saveRegistration({
+          ...(await this.d.store.getRegistration(r.token))!,
+          sentToTreasuryWei: r.sentToTreasuryWei,
+          reconciledToEntryId: r.reconciledToEntryId,
+          ...(r.measuredGrossWei ? { measuredReceivedWei: r.measuredReceivedWei, measuredGrossWei: r.measuredGrossWei } : {}),
+        });
+        if (res) this.d.log.info({ token: r.token, receivedWei: res.receivedWei.toString(), grossWei: res.grossWei.toString(), shareBps: await this.accounts.shareBps(r) }, 'tax reconciled with treasury receipts');
       } catch (err) {
         this.d.log.warn({ err: errMsg(err), token: r0.token }, 'reconcile failed');
       }
@@ -629,9 +738,59 @@ export class OffchainEngine {
     }
   }
 
+  // ───────────────────────────── creator payouts ─────────────────────────────
+
+  /**
+   * TAX MODEL v3: pays each creator's owed balance (CREATOR bucket) to its payout address once ≥ CREATOR_PAYOUT_MIN_BNB.
+   * Exempt from the daily cap (and not counted in it). The debit is booked before sending (reverted if nothing was
+   * sent), so a crash can never lead to paying the same balance twice and a payout never exceeds the ledger balance.
+   */
+  async tickCreatorPayouts() {
+    for (const r of await this.d.store.listRegistrations()) {
+      if (r.taxModel !== 'creator' || !r.payout) continue;
+      const token = r.token;
+      const payout = r.payout as Hex;
+      try {
+        await this.ops.run({ kind: 'CREATOR_PAYOUT', machine: token }, async () => {
+          const owed = await this.accounts.balance('CREATOR', token);
+          if (owed <= 0n || owed < this.cfg.creatorPayoutMinWei) return;
+          const meta = { kind: 'CREATOR_PAYOUT' as const, machine: token, capExempt: true, dedupeKey: `creator:${token}` };
+          if (!this.ops.active) {
+            await this.ops.transfer(payout, owed, meta).catch(() => undefined); // recorded once as QUEUED
+            return;
+          }
+          const bal = await this.ops.balance();
+          if (bal < owed) {
+            this.warnOnce(`creator-bal:${token}:${owed}`, { machine: token, owedWei: owed.toString(), balanceWei: bal.toString() }, 'creator payout waits: ops wallet balance below the owed amount (fund the ops wallet)');
+            return;
+          }
+          const ref = `creatorpay:${token}:${await this.accounts.store.maxEntryId()}`;
+          await this.accounts.book([{ ref, ts: this.now(), machine: token, bucket: 'CREATOR', kind: 'CREATOR_PAID', amountWei: -owed, txHash: null, data: { to: payout } }]);
+          let hash: string;
+          try {
+            hash = (await this.ops.transfer(payout, owed, meta)).hash;
+          } catch (err) {
+            // Not sent (hold / send failure / revert): give the balance back. Unknown outcome (no receipt): keep the debit.
+            const unknown = err instanceof OpsTxError && !!err.hash && !/reverted/.test(err.message);
+            if (!unknown) await this.accounts.book([{ ref: `${ref}:revert`, ts: this.now(), machine: token, bucket: 'CREATOR', kind: 'CREATOR_PAID', amountWei: owed, txHash: null, data: { to: payout, reverted: errMsg(err) } }]);
+            throw err;
+          }
+          const m = await this.accounts.syncCreator(token);
+          if (m) await this.ledger.activity(m, 'PAYOUT', `creator payout ${weiToBnb(owed).toFixed(4)} BNB → ${payout.slice(0, 6)}…${payout.slice(-4)}`, weiToUsd(owed, await this.d.bnbUsd()));
+          this.d.log.info({ machine: token, to: payout, bnb: weiToBnb(owed), hash }, 'creator payout sent');
+        });
+      } catch (err) {
+        if (!isHold(err)) this.d.log.warn({ err: errMsg(err), machine: token }, 'creator payout failed; will retry');
+      }
+    }
+  }
+
   // ───────────────────────────── sweep ─────────────────────────────
 
-  /** Optional: when the ops wallet IS the treasury, move the free platform share to SWEEP_TO_ADDRESS. */
+  /**
+   * Optional: when the ops wallet IS the treasury, move the free platform (company) share to SWEEP_TO_ADDRESS. Everything
+   * owed — pots, creators, $FORGE buyback, pending dividends/burns — plus the gas reserve stays in the wallet.
+   */
   async tickSweep() {
     const to = this.cfg.sweepTo;
     if (!to || !this.ops.active || !eq(this.ops.address, this.cfg.treasury)) return null;

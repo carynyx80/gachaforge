@@ -36,11 +36,13 @@ export interface OffchainStore {
   findOpsTxByDedupe(key: string, statuses: OpsTxStatus[]): Promise<OpsTx | null>;
   /** Newest first. */
   listOpsTxs(o: { limit: number; machine?: string }): Promise<OpsTx[]>;
-  /** BNB that left the wallet since `ts`: value of SENT/CONFIRMED txs + fees of every tx with a hash, sweeps excluded. */
+  /** BNB that left the wallet since `ts`: value of SENT/CONFIRMED txs + fees of every tx with a hash; sweeps and creator payouts (cap-exempt) excluded. */
   spentSince(ts: number): Promise<bigint>;
 }
 
 const lc = (a: string) => a.toLowerCase();
+/** ops_txs kinds that don't count against OPS_DAILY_CAP_BNB (keep in sync with the SQL in PostgresOffchainStore.spentSince). */
+export const CAP_EXEMPT_KINDS: OpsTx['kind'][] = ['SWEEP', 'CREATOR_PAYOUT'];
 const norm = (e: LedgerEntry): LedgerEntry => ({ ...e, machine: e.machine ? lc(e.machine) : null });
 
 export class MemoryOffchainStore implements OffchainStore {
@@ -120,7 +122,7 @@ export class MemoryOffchainStore implements OffchainStore {
   async spentSince(ts: number) {
     let t = 0n;
     for (const x of this.txs.values()) {
-      if (x.createdAt < ts || x.kind === 'SWEEP') continue;
+      if (x.createdAt < ts || CAP_EXEMPT_KINDS.includes(x.kind)) continue;
       if (x.status === 'SENT' || x.status === 'CONFIRMED') t += x.amountWei;
       if (x.hash) t += x.feeWei;
     }
@@ -245,7 +247,7 @@ export class PostgresOffchainStore implements OffchainStore {
         v: sql<string | null>`coalesce(sum(case when ${s.opsTxs.status} in ('SENT','CONFIRMED') then ${s.opsTxs.amountWei} else 0 end),0) + coalesce(sum(case when ${s.opsTxs.hash} is not null then ${s.opsTxs.feeWei} else 0 end),0)`,
       })
       .from(s.opsTxs)
-      .where(and(gte(s.opsTxs.createdAt, ts), sql`${s.opsTxs.kind} <> 'SWEEP'`));
+      .where(and(gte(s.opsTxs.createdAt, ts), sql`${s.opsTxs.kind} not in ('SWEEP', 'CREATOR_PAYOUT')`));
     return BigInt(r?.v ?? 0);
   }
 }

@@ -25,7 +25,7 @@ const code = async (p: Promise<unknown>) => {
 };
 
 describe('offchain registration verification', () => {
-  it('accepts a Portal launch with 200/200 tax and the treasury as tax recipient', async () => {
+  it('accepts a Portal launch with a 1–10% tax and the treasury as tax recipient', async () => {
     const h = harness();
     withLaunch(h);
     const v = await verifyLaunchTx(h.chain as any, { txHash: TX, portal: PORTAL, treasury: TREASURY });
@@ -35,11 +35,15 @@ describe('offchain registration verification', () => {
     const h = harness();
     withLaunch(h);
     const run = () => verifyLaunchTx(h.chain as any, { txHash: TX, portal: PORTAL, treasury: TREASURY });
-    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 300n, sellTaxRate: 300n };
-    expect(await code(run())).toBe('bad_tax');
-    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 200n, sellTaxRate: 100n };
-    expect(await code(run())).toBe('bad_tax');
-    h.chain.tokenState = { ...h.chain.tokenState, sellTaxRate: 200n };
+    for (const [b, s] of [[50n, 200n], [200n, 1100n], [250n, 300n], [0n, 0n]]) {
+      h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: b, sellTaxRate: s };
+      expect(await code(run())).toBe('bad_tax');
+    }
+    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 1000n, sellTaxRate: 100n };
+    expect(await code(run())).toBe('ok');
+    // must equal the signed values when given
+    expect(await code(verifyLaunchTx(h.chain as any, { txHash: TX, portal: PORTAL, treasury: TREASURY, tax: { buyTaxBps: 1000, sellTaxBps: 200 } }))).toBe('bad_tax');
+    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 200n, sellTaxRate: 200n };
     h.chain.taxRecipient = ALICE;
     expect(await code(run())).toBe('wrong_recipient');
     h.chain.taxRecipient = TREASURY;
@@ -100,9 +104,9 @@ describe('POST /api/machines/register', () => {
     expect(wrong.json()).toMatchObject({ error: 'wrong_recipient', details: { taxRecipient: ALICE } });
     expect(wrong.json().message).toMatch(/treasury/);
     h.chain.taxRecipient = TREASURY;
-    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 500n, sellTaxRate: 500n };
+    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 1200n, sellTaxRate: 500n };
     const tax = await post(a, { txHash: TX, pack: 'FORGE_28', strategy: 'RAFFLE', signature: await sig('FORGE_28', 'RAFFLE') });
-    expect(tax.json()).toMatchObject({ error: 'bad_tax', details: { buyTaxBps: 500, sellTaxBps: 500 } });
+    expect(tax.json()).toMatchObject({ error: 'bad_tax', details: { buyTaxBps: 1200, sellTaxBps: 500 } });
     await a.close();
   });
   it('rejects the $FORGE token and is unavailable outside offchain mode', async () => {
@@ -166,9 +170,11 @@ describe('auto-registration of treasury-taxed launches', () => {
     expect(await h.store.getRegistration(TOKEN)).toBeNull(); // < 10 min
     now += 601;
     h.chain.receipts.set(h32(8), { status: 'success', blockNumber: 100n, from: CREATOR, logs: [tokenCreatedLog(OTHER as any, CREATOR)] });
-    h.chain.overrides.getTokenV8Safe = (p) => (p.args[0].toLowerCase() === OTHER ? { ...h.chain.tokenState, buyTaxRate: 300n } : h.chain.tokenState);
+    h.chain.tokenState = { ...h.chain.tokenState, buyTaxRate: 500n, sellTaxRate: 300n };
+    h.chain.overrides.getTokenV8Safe = (p) => (p.args[0].toLowerCase() === OTHER ? { ...h.chain.tokenState, buyTaxRate: 50n } : h.chain.tokenState);
     await h.engine.tickAutoRegister();
-    expect(await h.store.getRegistration(TOKEN)).toMatchObject({ pack: 'FORGE_28', strategy: 'RAFFLE', registeredBy: 'auto' });
+    // fallback: on-chain tax rates, everything of the creator share to the pot, payout = launch tx sender
+    expect(await h.store.getRegistration(TOKEN)).toMatchObject({ pack: 'FORGE_28', strategy: 'RAFFLE', registeredBy: 'auto', taxModel: 'creator', buyTaxBps: 500, sellTaxBps: 300, potShareBps: 10_000, payout: CREATOR.toLowerCase() });
     expect(await h.store.getRegistration(OTHER)).toBeNull();
     expect(await h.svc.indexer.candidates()).toEqual([]);
   });

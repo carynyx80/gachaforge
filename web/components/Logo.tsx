@@ -1,26 +1,22 @@
-export function LogoMark({ size = 32 }: { size?: number }) {
-  // Original mark: a split gacha capsule sitting on an anvil.
+/**
+ * GachaForge mark: a block "F" on a lime tile. The middle arm breaks off into a
+ * detached square: the spark off the forge / the token popping out of the machine.
+ */
+export function LogoMark({ size = 32, className = '' }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden>
-      <defs>
-        <linearGradient id="lg-cap" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#D4FF7A" />
-          <stop offset="1" stopColor="#B6FF2E" />
-        </linearGradient>
-      </defs>
-      <path d="M20 4a11 11 0 0 1 11 11H9A11 11 0 0 1 20 4Z" fill="url(#lg-cap)" />
-      <path d="M9 17h22a11 11 0 0 1-3 7H12a11 11 0 0 1-3-7Z" fill="#F4F7EE" />
-      <circle cx="16" cy="10" r="2" fill="#fff" opacity=".7" />
-      <path d="M5 27h30l-4 4h-6l2 5H13l2-5H9z" fill="#1F2419" stroke="#B6FF2E" strokeWidth="1.5" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden className={className}>
+      <rect width="40" height="40" rx="9" fill="#B6FF2E" />
+      <path d="M11 9h18v6H17v3h6v5h-6v8h-6z" fill="#050505" />
+      <rect x="25" y="18" width="5" height="5" fill="#050505" />
     </svg>
   );
 }
 
-export function Wordmark() {
+export function Wordmark({ textClass = '' }: { textClass?: string }) {
   return (
     <span className="flex items-center gap-2">
       <LogoMark />
-      <span className="font-display text-[15px] font-extrabold tracking-tight sm:text-xl">
+      <span className={`font-display text-[15px] font-extrabold tracking-tight sm:text-xl ${textClass}`}>
         GACHA<span className="text-accent">FORGE</span>
       </span>
     </span>

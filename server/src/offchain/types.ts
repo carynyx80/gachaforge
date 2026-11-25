@@ -2,16 +2,17 @@ import type { PackId, Strategy } from '../types.js';
 
 /**
  * Ledger buckets (BNB wei, signed entries; balance = Σ):
- *  TAX       gross 2% tax of every indexed trade (informational, never spent)
+ *  TAX       gross side-specific tax of every indexed trade (informational, never spent)
  *  FLAP      flap.sh's cut (estimate, corrected by RECONCILE entries from real treasury receipts)
- *  PLATFORM  90% of what reaches the treasury (company share; SWEEP debits it)
- *  POT       7% per machine (virtual gacha pot; PULL_SPEND debits it, unclaimed sell-backs credit it)
- *  BUYBACK   3% global ($FORGE buyback & burn; BUYBACK_SPEND debits it)
+ *  PLATFORM  company share of what reaches the treasury (SWEEP debits it): 5% for creator machines (v3), 90% $FORGE/legacy
+ *  POT       per machine virtual gacha pot (PULL_SPEND debits it, unclaimed sell-backs credit it): 90%×potShare (v3), 7%
+ *  BUYBACK   global $FORGE buyback & burn (BUYBACK_SPEND debits it): 5% (v3), 3% ($FORGE/legacy)
+ *  CREATOR   per machine, owed to the creator payout address: 90%×(1−potShare) (v3); CREATOR_PAID debits it
  *  DIVIDEND  per machine, sell-back proceeds owed to holders (payouts debit it; what is left is dust carry-over)
  *  BURN      per machine, sell-back proceeds owed to a buy & burn of the machine token
  */
-export type Bucket = 'TAX' | 'FLAP' | 'PLATFORM' | 'POT' | 'BUYBACK' | 'DIVIDEND' | 'BURN';
-export const BUCKETS: Bucket[] = ['TAX', 'FLAP', 'PLATFORM', 'POT', 'BUYBACK', 'DIVIDEND', 'BURN'];
+export type Bucket = 'TAX' | 'FLAP' | 'PLATFORM' | 'POT' | 'BUYBACK' | 'DIVIDEND' | 'BURN' | 'CREATOR';
+export const BUCKETS: Bucket[] = ['TAX', 'FLAP', 'PLATFORM', 'POT', 'BUYBACK', 'DIVIDEND', 'BURN', 'CREATOR'];
 
 export type EntryKind =
   | 'TRADE_TAX'
@@ -23,6 +24,7 @@ export type EntryKind =
   | 'BURN_SPEND'
   | 'BUYBACK_SPEND'
   | 'SWEEP'
+  | 'CREATOR_PAID'
   | 'ADJUST';
 
 export interface LedgerEntry {
@@ -39,7 +41,7 @@ export interface LedgerEntry {
 }
 
 export type OpsTxStatus = 'QUEUED' | 'BLOCKED' | 'SENT' | 'CONFIRMED' | 'FAILED';
-export type OpsTxKind = 'PULL' | 'SELLBACK' | 'DIVIDEND' | 'BURN' | 'BUYBACK' | 'DISPATCH' | 'SWEEP' | 'CARD_TRANSFER' | 'APPROVE' | 'OTHER';
+export type OpsTxKind = 'PULL' | 'SELLBACK' | 'DIVIDEND' | 'BURN' | 'BUYBACK' | 'DISPATCH' | 'SWEEP' | 'CREATOR_PAYOUT' | 'CARD_TRANSFER' | 'APPROVE' | 'OTHER';
 
 export interface OpsTx {
   id: string;
@@ -89,7 +91,21 @@ export interface Registration {
   pack: PackId;
   strategy: Strategy;
   split?: { dividendBps: number; burnBps: number; lpBps: number };
-  registeredBy: 'api' | 'auto';
+  registeredBy: 'api' | 'auto' | 'forge';
+  /**
+   * TAX MODEL v3. Absent on registrations made before v3 → 'legacy' (fixed 2%, 90/7/3; never changed retroactively).
+   */
+  taxModel?: 'creator' | 'forge' | 'legacy';
+  /** On-chain buy / sell tax (bps), verified at registration. */
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  /** 'creator' model: pot share of the creator share (2000–10000). */
+  potShareBps?: number;
+  /** 'creator' model: where creator payouts go (signed at registration; default = launch tx sender). */
+  payout?: string;
+  /** Per-token measured treasury receipts vs gross tax (flap cut), cumulative wei (decimal strings). */
+  measuredReceivedWei?: string;
+  measuredGrossWei?: string;
   registeredAt: number;
   /** PancakeSwap V2 pair once graduated. */
   pool?: string;

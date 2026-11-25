@@ -39,6 +39,17 @@ export interface Machine {
   links?: { website?: string; x?: string; telegram?: string };
   /** OFF-CHAIN MODE: pot is full but the pull waits (no Renaiss key / ops wallet / paused). UI: "Pull queued — card buying starts soon". */
   pullQueued?: boolean;
+  // ── TAX MODEL v3 (additive; old machines: buy = sell = taxBps) ──
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  /** Gacha-pot share of the creator share (2000–10000 bps). */
+  potShareBps?: number;
+  /** Creator payout address (BNB from the creator share). */
+  creatorPayout?: string;
+  creatorPaidBnb?: number;
+  creatorOwedBnb?: number;
+  /** 'creator' = v3 creator split, 'forge' = $FORGE 90/7/3, 'legacy' = v2 fixed 2% 90/7/3. */
+  taxModel?: 'creator' | 'forge' | 'legacy';
 }
 
 export interface Card {
@@ -141,7 +152,7 @@ export interface DividendClaim {
   pushed: boolean;
 }
 
-/** One trade's 2% tax and how it splits (SPEC "Live fee flow"). All amounts USD. */
+/** One trade's tax (side-specific) and how it splits (SPEC "Live fee flow" + "TAX MODEL v3"). All amounts USD. */
 export interface FeeEvent {
   id: string;
   machine: string;
@@ -151,16 +162,20 @@ export interface FeeEvent {
   amountBnb: number;
   txHash: string;
   timestamp: number;
-  /** 2% of the trade */
+  /** side-specific tax of the trade (buyTaxBps / sellTaxBps) */
   taxUsd: number;
-  /** flap.sh's cut (~10% of tax) */
+  /** flap.sh's cut (measured per token) */
   flapUsd: number;
-  /** 90% of the rest -> company wallet */
+  /** company share (= companyUsd): 5% of the rest for creator machines, 90% for $FORGE / legacy */
   platformUsd: number;
-  /** 7% of the rest -> this machine's gacha pot */
+  /** this machine's gacha pot (90% × potShare for creator machines, 7% for $FORGE / legacy) */
   potUsd: number;
-  /** 3% of the rest -> $FORGE buyback */
+  /** $FORGE buyback (5% for creator machines, 3% for $FORGE / legacy) */
   buybackUsd: number;
+  /** creator payout share (90% × (1 − potShare)); 0 for $FORGE / legacy */
+  creatorUsd: number;
+  /** = platformUsd */
+  companyUsd: number;
   /** machine pot incl. this trade (estimate until vault sync) */
   potAfterUsd: number;
   /** next pack price for this machine */
@@ -175,6 +190,7 @@ export interface FeeTotals {
   platformUsd: number;
   potUsd: number;
   buybackUsd: number;
+  creatorUsd: number;
 }
 
 /** GET /api/fees/summary */

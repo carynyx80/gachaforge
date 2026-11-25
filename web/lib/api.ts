@@ -103,7 +103,14 @@ export interface RegisterBody {
   pack: PackId;
   strategy: Strategy;
   split?: { dividendBps: number; burnBps: number; lpBps: number };
-  /** personal_sign by the launch tx sender over registerMessage(...) (lib/registerMessage.ts). */
+  /** TAX MODEL v3: creator-chosen tax (100–1000 bps each side, verified on-chain by the backend). */
+  buyTaxBps: number;
+  sellTaxBps: number;
+  /** Gacha pot share of the creator's 90%, 2000–10000 bps. */
+  potShareBps: number;
+  /** Creator payout address (defaults to the launching wallet). */
+  payout: string;
+  /** personal_sign by the launch tx sender over buildRegisterMessage(...) (lib/registerMessage.ts). */
   signature?: string;
 }
 /** POST /api/machines/register — backend verifies the Portal launch tx on-chain, then records pack/strategy. */

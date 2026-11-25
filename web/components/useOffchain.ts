@@ -11,9 +11,10 @@ import type { Health } from '@/lib/types';
 export function useOffT() {
   const { lang } = useT();
   return useCallback((k: OffKey, vars?: Record<string, string | number>) => {
-    let s = fillEconomics(offDict[lang][k]);
+    // Caller vars win over the global economics placeholders (e.g. a machine's own {pot} vs the $FORGE {pot}).
+    let s: string = offDict[lang][k];
     if (vars) s = s.replace(/\{(\w+)\}/g, (m, v: string) => (v in vars ? String(vars[v]) : m));
-    return s;
+    return fillEconomics(s);
   }, [lang]);
 }
 

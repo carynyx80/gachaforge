@@ -1,7 +1,7 @@
 'use client';
 import { isAddress } from 'viem';
 import type { Machine } from '@/lib/types';
-import { SPLIT } from '@/lib/economics';
+import { machineSplit, machineTax } from '@/lib/economics';
 import { SLIPPAGE_BPS } from '@/lib/chain';
 import { ActionButton } from '../wallet/ActionButton';
 import { TxStatus } from '../wallet/tx';
@@ -17,6 +17,8 @@ export function TradePanel({ m }: { m: Machine }) {
   const health = useHealth();
   const real = isAddress(m.address) && !!health.data && health.data.mode !== 'mock';
   const ft = useFlapTrade({ token: m.address, symbol: m.ticker, enabled: real, slipBps: Number(SLIPPAGE_BPS), refetchMs: 15_000 });
+  const tax = machineTax(m);
+  const pct = machineSplit(tax.buyBps, tax.potShareBps).pctOfNet;
   const { wallet: w, side, switchSide, amt, setAmt, pick, quoteOut, minOut, balance, tx, submit } = ft;
 
   const label = ft.status === 'enter' ? t('tp_enter')
@@ -50,10 +52,11 @@ export function TradePanel({ m }: { m: Machine }) {
             <div className="flex justify-between"><span>{t('tp_min')}</span><span className="font-mono">{fmt(minOut)}</span></div>
           </>
         )}
-        <div className="flex justify-between"><span>{t('tp_tax')}</span><span className="font-mono text-fg">{t('tp_tax_val')}</span></div>
-        <div className="flex justify-between"><span>{SPLIT.platform}% {t('tp_of_tax')}</span><span>{t('tp_platform')}</span></div>
-        <div className="flex justify-between"><span>{SPLIT.pot}% {t('tp_of_tax')}</span><span className="text-glow">{t('tp_pot')}</span></div>
-        <div className="flex justify-between"><span>{SPLIT.buyback}% {t('tp_of_tax')}</span><span>{t('tp_buyback')}</span></div>
+        <div className="flex justify-between"><span>{t('tp_tax')}</span><span className="font-mono text-fg">{t('tp_tax_val', { buy: tax.buyPct, sell: tax.sellPct })}</span></div>
+        <div className="flex justify-between"><span>{pct.company}% {t('tp_of_tax')}</span><span>{t('tp_platform')}</span></div>
+        <div className="flex justify-between"><span>{pct.buyback}% {t('tp_of_tax')}</span><span>{t('tp_buyback')}</span></div>
+        <div className="flex justify-between"><span>{pct.pot}% {t('tp_of_tax')}</span><span className="text-glow">{t('tp_pot')}</span></div>
+        <div className="flex justify-between"><span>{pct.creator}% {t('tp_of_tax')}</span><span className="text-success">{t('tp_creator')}</span></div>
       </div>
       <ActionButton className="mt-4" onClick={submit} busy={tx.busy}
         disabledLabel={real ? undefined : t('tp_preview')}

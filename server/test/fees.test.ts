@@ -8,8 +8,8 @@ import { seedMock, simulateTrade } from '../src/mock/seed.js';
 import { MemoryRepository } from '../src/store/memory.js';
 import type { FeeEvent, Machine, Trade, WsMessage } from '../src/types.js';
 
-const feeKeys = ['amountBnb', 'buybackUsd', 'flapUsd', 'id', 'machine', 'packPriceUsd', 'pending', 'platformUsd', 'potAfterUsd', 'potUsd', 'side', 'taxUsd', 'ticker', 'timestamp', 'trader', 'txHash'];
-const totalKeys = ['buybackUsd', 'flapUsd', 'platformUsd', 'potUsd', 'totalTaxUsd'];
+const feeKeys = ['amountBnb', 'buybackUsd', 'companyUsd', 'creatorUsd', 'flapUsd', 'id', 'machine', 'packPriceUsd', 'pending', 'platformUsd', 'potAfterUsd', 'potUsd', 'side', 'taxUsd', 'ticker', 'timestamp', 'trader', 'txHash'];
+const totalKeys = ['buybackUsd', 'creatorUsd', 'flapUsd', 'platformUsd', 'potUsd', 'totalTaxUsd'];
 
 const machine = (over: Partial<Machine> = {}): Machine => ({
   address: '0x0000000000000000000000000000000000007777',
@@ -47,7 +47,28 @@ describe('fee split', () => {
     expect(TREASURY_SHARE_BPS + POT_SHARE_BPS + BUYBACK_SHARE_BPS).toBe(10_000);
   });
   it('1 BNB @ $600: tax $12 → flap $1.20, pot $0.76, buyback $0.32, platform $9.72', () => {
-    expect(feeSplit(600)).toEqual({ taxUsd: 12, flapUsd: 1.2, potUsd: 0.76, buybackUsd: 0.32, platformUsd: 9.72 });
+    expect(feeSplit(600)).toEqual({ taxUsd: 12, flapUsd: 1.2, potUsd: 0.76, buybackUsd: 0.32, platformUsd: 9.72, companyUsd: 9.72, creatorUsd: 0 });
+  });
+  it('v3 creator split: 5% tax, potShare 40% → company 5%, buyback 5%, pot 36%, creator 54% of the net', () => {
+    // $1000 trade, 5% → $50 tax, flap $5, net $45: company 2.25, buyback 2.25, pot 16.2, creator 24.3
+    expect(feeSplit(1000, 500, { model: 'creator', potShareBps: 4000 })).toEqual({ taxUsd: 50, flapUsd: 5, platformUsd: 2.25, companyUsd: 2.25, buybackUsd: 2.25, potUsd: 16.2, creatorUsd: 24.3 });
+    for (const [bps, pot] of [[100, 2000], [300, 10_000], [700, 5500], [1000, 2000]] as const)
+      for (const usd of [1, 12.34, 999.99, 98_765.43]) {
+        const s = feeSplit(usd, bps, { model: 'creator', potShareBps: pot });
+        expect(s.flapUsd + s.companyUsd + s.buybackUsd + s.potUsd + s.creatorUsd).toBeCloseTo(s.taxUsd, 9);
+        expect(s.platformUsd).toBe(s.companyUsd);
+      }
+  });
+  it('side-specific tax in the ledger fee flow (buy 5% / sell 3%)', async () => {
+    const repo = new MemoryRepository();
+    const ledger = new Ledger(repo, new Bus());
+    await repo.upsertMachine(machine({ buyTaxBps: 500, sellTaxBps: 300, taxBps: 500, taxModel: 'creator', potShareBps: 10_000 }));
+    const A = '0x0000000000000000000000000000000000007777';
+    const b = (await ledger.recordFee(A, trade(1, 100), 600, { id: 'b' }))!;
+    const s = (await ledger.recordFee(A, { ...trade(1, 101), side: 'SELL' }, 600, { id: 's' }))!;
+    expect(b.taxUsd).toBe(30);
+    expect(s.taxUsd).toBe(18);
+    expect(b.creatorUsd).toBe(0); // potShare 100%
   });
   it('parts always sum to taxUsd', () => {
     for (const usd of [0.5, 1, 12.34, 99.99, 152.7, 1234.56, 98_765.43]) {
@@ -106,7 +127,8 @@ describe('live fee flow (ledger)', () => {
       platformUsd: 24.3,
       potUsd: 1.9,
       buybackUsd: 0.8,
-      last24h: { totalTaxUsd: 18, flapUsd: 1.8, platformUsd: 14.58, potUsd: 1.14, buybackUsd: 0.48 },
+      creatorUsd: 0,
+      last24h: { totalTaxUsd: 18, flapUsd: 1.8, platformUsd: 14.58, potUsd: 1.14, buybackUsd: 0.48, creatorUsd: 0 },
     });
     expect(s.flapUsd + s.platformUsd + s.potUsd + s.buybackUsd).toBeCloseTo(s.totalTaxUsd, 6);
   });
@@ -169,7 +191,8 @@ describe('fees API + WS (mock simulator)', () => {
     expect(body).toHaveLength(30);
     for (const e of body as FeeEvent[]) {
       expect(Object.keys(e).sort()).toEqual(feeKeys);
-      expect(e.flapUsd + e.platformUsd + e.potUsd + e.buybackUsd).toBeCloseTo(e.taxUsd, 6);
+      expect(e.flapUsd + e.platformUsd + e.potUsd + e.buybackUsd + e.creatorUsd).toBeCloseTo(e.taxUsd, 6);
+      expect(e.companyUsd).toBe(e.platformUsd);
     }
     const ts = (body as FeeEvent[]).map((e) => e.timestamp);
     expect([...ts].sort((a, b) => b - a)).toEqual(ts);
@@ -190,6 +213,7 @@ describe('fees API + WS (mock simulator)', () => {
     expect(Object.keys(body.last24h).sort()).toEqual(totalKeys);
     expect(body.totalTaxUsd).toBeGreaterThan(0);
     expect(body.last24h.totalTaxUsd).toBeCloseTo(body.totalTaxUsd, 2);
-    expect(body.flapUsd + body.platformUsd + body.potUsd + body.buybackUsd).toBeCloseTo(body.totalTaxUsd, 1);
+    expect(body.flapUsd + body.platformUsd + body.potUsd + body.buybackUsd + body.creatorUsd).toBeCloseTo(body.totalTaxUsd, 1);
+    expect(body.creatorUsd).toBeGreaterThan(0);
   });
 });

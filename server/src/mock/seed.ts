@@ -1,5 +1,5 @@
 import { keccak256, parseEther, stringToHex, type Hex } from 'viem';
-import { feeSplit, PACK_PRICE_USD, TAX_BPS, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
+import { feeSplit, PACK_PRICE_USD, sideTaxBps, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
 import { excludedFor } from '../indexer/excluded.js';
 import { now, round2, type Ledger } from '../ledger.js';
 import type { Logger } from '../log.js';
@@ -40,6 +40,17 @@ export const addrFrom = (rng: Rng) => '0x' + Array.from({ length: 40 }, () => Ma
 export const txFrom = (rng: Rng) => keccak256(stringToHex(`tx-${rng()}-${rng()}`));
 const int = (rng: Rng, lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
 
+/**
+ * TAX MODEL v3 variety for the UI: buy/sell tax 1–10% (whole %), pot share 20–100% of the creator share. Derived from the
+ * machine index (not the rng) so the rest of the seeded data stays identical.
+ */
+export function mockTax(i: number) {
+  const buyTaxBps = 100 * (1 + ((i * 3) % 10));
+  const sellTaxBps = 100 * (1 + ((i * 7 + 2) % 10));
+  const potShareBps = 2000 + 1000 * (i % 9);
+  return { buyTaxBps, sellTaxBps, potShareBps };
+}
+
 export interface MockContext {
   rng: Rng;
   ledger: Ledger;
@@ -78,7 +89,11 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
       pack,
       packPriceUsd: PACK_PRICE_USD[pack],
       strategy,
-      taxBps: TAX_BPS,
+      taxBps: mockTax(i).buyTaxBps,
+      ...mockTax(i),
+      taxModel: 'creator',
+      creatorPaidBnb: 0,
+      creatorOwedBnb: 0,
       ...(strategy === 'SPLIT' ? { split: { dividendBps: 5000, burnBps: 3000, lpBps: 2000 } } : {}),
       stage: graduated ? 'GRADUATED' : 'CURVE',
       bondingCurvePct: graduated ? 100 : round2(5 + rng() * 90),
@@ -94,6 +109,7 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
       burnedTokens: 0,
       ...(i % 2 === 0 ? { links: { website: `https://example.com/${ticker.toLowerCase()}`, x: `https://x.com/${ticker.toLowerCase()}` } } : {}),
     };
+    m.creatorPayout = m.creator;
     await repo.upsertMachine(m);
 
     // Holder book: curve/pool share + long tail; total == 1B.
@@ -141,12 +157,16 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
 }
 
 /**
- * Simulated live trades are sized in USD so the cadence doesn't depend on BNB_USD_PRICE: ~$200 avg (12 + U²·560).
- * The pot gets 7% of the 90% left after flap.sh's 10% cut of a 2% tax (0.126% of volume): ≈ $0.25/trade.
- * At ~5 trades/s (default SIM_INTERVAL_MS=400, 1–3 trades/tick) that's ≈ $75/min into pots → roughly one pull
- * every ~45s (30–90s) across all machines, while hot machines' meters move every second or so.
+ * Simulated live trades are sized in USD so the cadence doesn't depend on BNB_USD_PRICE: ~$200 avg (12 + U²·560), scaled
+ * by each machine's pot rate so a pull still fires roughly every ~45s across all machines whatever its tax / pot share
+ * (reference: 7% of the 90% left after flap.sh's 10% cut of a 2% tax = 0.126% of volume ≈ $0.25/trade).
  */
-const simTradeUsd = (rng: Rng) => 12 + rng() ** 2 * 560;
+const REF_POT_RATE = 0.00126;
+const potRate = (m: Machine) => {
+  const avgTax = (sideTaxBps(m, 'BUY') + sideTaxBps(m, 'SELL')) / 20_000;
+  return m.taxModel === 'creator' ? avgTax * 0.9 * 0.9 * ((m.potShareBps ?? 10_000) / 10_000) : avgTax * 0.9 * 0.07;
+};
+const simTradeUsd = (rng: Rng, m: Machine) => (12 + rng() ** 2 * 560) * Math.min(1, REF_POT_RATE / Math.max(potRate(m), 1e-9));
 /** Share of simulated trades that go to the "hot" machines. */
 const HOT_SHARE = 0.45;
 const HOT_COUNT = 3;
@@ -155,14 +175,15 @@ export const MOCK_SYNC_MS = 10_000;
 
 function mockTrade(ctx: MockContext, m: Machine, ts: number, live = false): Trade {
   const { rng } = ctx;
-  const amountBnb = round4(live ? simTradeUsd(rng) / ctx.bnbUsd : 0.01 + rng() ** 2 * 3);
+  const amountBnb = round4(live ? simTradeUsd(rng, m) / ctx.bnbUsd : 0.01 + rng() ** 2 * 3);
   const priceUsdPerToken = m.marketCapUsd / 1e9;
+  const side = rng() < 0.58 ? 'BUY' : 'SELL';
   return {
-    side: rng() < 0.58 ? 'BUY' : 'SELL',
+    side,
     trader: addrFrom(rng),
     amountBnb,
     tokens: round2((amountBnb * ctx.bnbUsd) / Math.max(priceUsdPerToken, 1e-9)),
-    taxUsd: feeSplit(amountBnb * ctx.bnbUsd, m.taxBps).taxUsd,
+    taxUsd: feeSplit(amountBnb * ctx.bnbUsd, sideTaxBps(m, side)).taxUsd,
     txHash: txFrom(rng),
     timestamp: ts,
   };
@@ -264,6 +285,7 @@ export async function simulateTrade(ctx: MockContext, address: string, ts = now(
     patch: (cur) => {
       const curve = cur.stage === 'CURVE' ? Math.min(100, round2(cur.bondingCurvePct + curveStep)) : 100;
       return {
+        ...creatorPatch(cur, t, ctx.bnbUsd),
         marketCapUsd: round2(cur.marketCapUsd * drift),
         change24hPct: round2(cur.change24hPct + (drift - 1) * 100),
         volume24hUsd: round2(cur.volume24hUsd + t.amountBnb * ctx.bnbUsd),
@@ -281,6 +303,19 @@ export async function simulateTrade(ctx: MockContext, address: string, ts = now(
   }
   const pull = fee.potAfterUsd >= fee.packPriceUsd ? await simulatePull(ctx, m.address) : null;
   return { fee, pull };
+}
+
+/** Mock creator payouts: the trade's creator share accrues as owed and is "paid" once ≥ 0.01 BNB (like CREATOR_PAYOUT_MIN_BNB). */
+function creatorPatch(m: Machine, t: Trade, bnbUsd: number): Partial<Machine> {
+  if (m.taxModel !== 'creator') return {};
+  const s = feeSplit(t.amountBnb * bnbUsd, sideTaxBps(m, t.side), { model: 'creator', potShareBps: m.potShareBps });
+  let owed = (m.creatorOwedBnb ?? 0) + s.creatorUsd / bnbUsd;
+  let paid = m.creatorPaidBnb ?? 0;
+  if (owed >= 0.01) {
+    paid += owed;
+    owed = 0;
+  }
+  return { creatorOwedBnb: Math.round(owed * 1e6) / 1e6, creatorPaidBnb: Math.round(paid * 1e6) / 1e6 };
 }
 
 /** Picks the simulator's "hot" machines (deterministic for a given rng). */

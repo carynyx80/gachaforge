@@ -32,6 +32,17 @@ export interface Machine {
   links?: { website?: string; x?: string; telegram?: string };
   /** Off-chain mode: pot ≥ pack price but card buying (Renaiss) isn't enabled yet. */
   pullQueued?: boolean;
+  // TAX MODEL v3 (SPEC "TAX MODEL v3"); old machines: buy = sell = taxBps.
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  /** Gacha-pot share of the creator share (2000–10000 bps). */
+  potShareBps?: number;
+  /** Creator payout address. */
+  creatorPayout?: string;
+  creatorPaidBnb?: number;
+  creatorOwedBnb?: number;
+  /** 'creator' = v3 creator split, 'forge' = $FORGE 90/7/3, 'legacy' = pre-v3 fixed 2%. */
+  taxModel?: 'creator' | 'forge' | 'legacy';
 }
 
 export interface Pull {
@@ -123,11 +134,18 @@ export interface TransparencyMachine {
   spentBnb?: number;
   pulls?: number;
   pullQueued?: boolean;
+  taxModel?: string;
+  buyTaxBps?: number | null;
+  sellTaxBps?: number | null;
+  potShareBps?: number | null;
+  creatorPayout?: string | null;
+  creatorOwedBnb?: number;
+  creatorPaidBnb?: number;
 }
 export interface Transparency {
   treasury: { address?: string; balanceBnb?: number };
   ops: { address?: string; balanceBnb?: number };
-  owed: { pots: number; buyback: number; dividendsPending: number; burnsPending?: number; total?: number };
+  owed: { pots: number; buyback: number; dividendsPending: number; burnsPending?: number; creators?: number; total?: number };
   machines?: TransparencyMachine[];
   txs: TransparencyTx[];
   updatedAt?: number;
