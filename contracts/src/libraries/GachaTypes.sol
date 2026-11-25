@@ -29,9 +29,12 @@ library GachaTypes {
         PackId packId;
         uint256 packPriceUsd; // whole USD
         Strategy strategy;
-        uint16 taxBps;
+        uint16 taxBps; // always TAX_BPS
         SplitBps split;
     }
+
+    /// @notice Fixed trading tax for every GachaForge token: 2% buy and 2% sell.
+    uint16 internal constant TAX_BPS = 200;
 
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 

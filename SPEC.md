@@ -11,8 +11,8 @@ GachaForge is a meme-token launchpad on **BNB Chain** where trading tax buys rea
 - Languages: English + Chinese (中文) toggle.
 
 ## Mechanics (locked at launch, immutable)
-- Trading tax: creator chooses 1–10% (integer), same for buy & sell. Locked forever.
-- Tax split of what reaches the token's vault: **70% gacha pot / 20% $FORGE buyback & burn / 10% platform treasury**. Creator gets 0%.
+- Trading tax: **fixed 2% buy / 2% sell** for every token (`taxBps = 200`). Not creator-configurable. Locked forever.
+- Tax split of what reaches the token's vault (flap.sh keeps ~10% of the tax first at a 2% tax (≈0.2% of volume, set by flap.sh); the vault receives ~90%): **90% platform treasury (`0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c`) / 7% gacha pot / 3% $FORGE buyback & burn**. Creator gets 0%.
 - Packs (USD price per pull): `FORGE_28` $28 (max win ~10x), `FORGE_48` $48 (~11x), `FORGE_88` $88 (~9.9x). Pull pays pack price in BNB at Chainlink BNB/USD + up to 10% slippage buffer; leftover returns to pot.
 - One open pull per machine at a time; cooldown between pulls (default 60s, configurable by timelock).
 - Pulls start as soon as pot >= pack price, even pre-graduation (bonding curve on flap.sh).

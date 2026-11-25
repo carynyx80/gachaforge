@@ -8,7 +8,7 @@ import {ILaunchpadRouter} from "./interfaces/ILaunchpadRouter.sol";
 import {GachaTypes} from "./libraries/GachaTypes.sol";
 
 /// @title BuybackBurner
-/// @notice Accumulates the 20% $FORGE share from every MachineVault, buys $FORGE and burns it
+/// @notice Accumulates the $FORGE buyback share (MachineVault.BUYBACK_BPS) from every MachineVault, buys $FORGE and burns it
 ///         (sends to the dead address). BNB can only leave this contract through a $FORGE buy.
 /// @dev $FORGE may not exist at deploy time: deploy with forge = address(0). BNB then simply
 ///      accumulates (buybacks revert with ForgeUnset) until the admin (TimelockController) calls

@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { getBurns, getStats } from '@/lib/api';
+import { FLAP_CUT_PCT, SPLIT, TAX_PCT } from '@/lib/economics';
 import { LiveRefresh } from '@/components/LiveRefresh';
 import { PageLoading } from '@/components/PageLoading';
 import { BurnCounter } from '@/components/BurnCounter';
@@ -12,7 +13,7 @@ export default function BurnPage() {
     <div className="mx-auto max-w-7xl px-4 pt-10">
       <LiveRefresh />
       <h1 className="font-display text-4xl font-bold uppercase sm:text-5xl">Buyback <span className="neon-text text-accent">&</span> Burn</h1>
-      <p className="mt-2 max-w-2xl text-muted">20% of every machine&apos;s trading tax buys $FORGE on the market and sends it to the dead address. Forever.</p>
+      <p className="mt-2 max-w-2xl text-muted">Every machine has a fixed {TAX_PCT}% buy / {TAX_PCT}% sell tax. After flap.sh keeps {FLAP_CUT_PCT}%, {SPLIT.buyback}% of the tax that reaches GachaForge buys $FORGE on the market and sends it to the dead address. The rest goes {SPLIT.platform}% to the GachaForge platform and {SPLIT.pot}% to the gacha pot.</p>
       <Suspense fallback={<PageLoading label="Loading burns…" />}>
         <BurnData />
       </Suspense>

@@ -13,8 +13,9 @@ import {ILaunchpadRouter} from "./interfaces/ILaunchpadRouter.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
 /// @title MachineVault
-/// @notice One vault per GachaForge token. Receives 100% of the token's trading tax in BNB and
-///         splits it 70% gacha pot / 20% $FORGE buyback reserve / 10% treasury. Runs the pull
+/// @notice One vault per GachaForge token. Receives 100% of the token's trading tax (fixed 2% buy /
+///         2% sell) in BNB and splits it 90% treasury / 7% gacha pot / 3% $FORGE buyback
+///         (POT_BPS / BUYBACK_BPS; treasury takes the remainder). Runs the pull
 ///         lifecycle (Renaiss packs) and routes results by the token's immutable strategy.
 /// @dev The creator has no privileged rights here. All privileged actions are OPERATOR_ROLE on the
 ///      factory (revocable by the timelock admin). Config is immutable and read from the factory
@@ -24,9 +25,10 @@ contract MachineVault is ReentrancyGuardTransient {
 
     // ---------------------------------------------------------------- constants
     uint256 public constant BPS = 10_000;
-    uint256 public constant POT_BPS = 7_000;
-    uint256 public constant BUYBACK_BPS = 2_000;
-    uint256 public constant TREASURY_BPS = 1_000; // remainder, kept for readability
+    // Tax split. Only POT_BPS / BUYBACK_BPS are set; treasury takes the remainder (incl. rounding).
+    uint256 public constant POT_BPS = 700; // 7% gacha pot
+    uint256 public constant BUYBACK_BPS = 300; // 3% $FORGE buyback (BuybackBurner)
+    uint256 public constant TREASURY_BPS = BPS - POT_BPS - BUYBACK_BPS; // 90% treasury, for readability
     uint256 public constant SLIPPAGE_CAP_BPS = 11_000; // pull may spend up to price * 1.10
     uint256 public constant CLAIM_WINDOW = 180 days;
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -51,8 +53,8 @@ contract MachineVault is ReentrancyGuardTransient {
     uint256 public dividendLiability; // assigned to rounds, unclaimed
     uint256 public burnReserve; // BNB to buy back & burn this token
     uint256 public lpReserve; // BNB to add as locked LP (SPLIT)
-    uint256 public buybackOwed; // 20% share not yet forwarded to BuybackBurner
-    uint256 public treasuryOwed; // 10% share not yet forwarded to treasury
+    uint256 public buybackOwed; // BUYBACK_BPS share not yet forwarded to BuybackBurner
+    uint256 public treasuryOwed; // treasury share not yet forwarded to treasury
 
     // transient: router refund tracking during our own router calls (TLOAD/TSTORE fit in 2300 gas)
     address internal transient _refundSource;
@@ -81,6 +83,8 @@ contract MachineVault is ReentrancyGuardTransient {
     uint256 public openPullId; // 0 = none open
     uint256 public lastPullClosedAt;
     mapping(uint256 => Pull) public pulls;
+    /// @notice HIT_HUNTER pulls whose hit card had no eligible holder at the snapshot (sell-back allowed).
+    mapping(uint256 => bool) public noEligibleHolder;
 
     // ---------------------------------------------------------------- dividends
     struct Round {
@@ -124,6 +128,7 @@ contract MachineVault is ReentrancyGuardTransient {
     error BadPullStatus(uint256 pullId);
     error BadRefund();
     error StrategyMismatch();
+    event NoEligibleRecorded(uint256 indexed pullId, uint256 snapshotBlock, bytes32 snapshotHash);
     error InvalidWinner();
     error InvalidSnapshot();
     error ZeroAmount();
@@ -157,7 +162,7 @@ contract MachineVault is ReentrancyGuardTransient {
         if (c.token == address(0) || c.treasury == address(0) || c.buybackBurner == address(0)) {
             revert InvalidConfig();
         }
-        if (c.taxBps < 100 || c.taxBps > 1000 || c.taxBps % 100 != 0) revert InvalidConfig();
+        if (c.taxBps != GachaTypes.TAX_BPS) revert InvalidConfig();
         if (c.packPriceUsd != GachaTypes.packPriceUsd(c.packId)) revert InvalidConfig();
         if (c.strategy == GachaTypes.Strategy.SPLIT) {
             if (uint256(c.split.dividendBps) + c.split.burnBps + c.split.lpBps != BPS) revert InvalidConfig();
@@ -336,11 +341,24 @@ contract MachineVault is ReentrancyGuardTransient {
         emit RaffleRecorded(pullId, snapshotBlock, snapshotHash, seed, winner);
     }
 
+    /// @notice HIT_HUNTER only: publish that a hit card had no eligible holder at the snapshot,
+    ///         which unlocks selling it back (proceeds buy & burn, as for a miss).
+    function recordNoEligible(uint256 pullId, uint256 snapshotBlock, bytes32 snapshotHash) external onlyOperator {
+        Pull storage p = pulls[pullId];
+        if (p.status != PullStatus.SETTLED) revert BadPullStatus(pullId);
+        if (strategy != GachaTypes.Strategy.HIT_HUNTER || p.cardValueUsd <= packPriceUsd) revert StrategyMismatch();
+        if (snapshotBlock == 0 || snapshotBlock >= block.number || snapshotHash == bytes32(0)) {
+            revert InvalidSnapshot();
+        }
+        noEligibleHolder[pullId] = true;
+        emit NoEligibleRecorded(pullId, snapshotBlock, snapshotHash);
+    }
+
     /// @notice Sell-back proceeds for a settled pull, routed by strategy.
     function depositProceeds(uint256 pullId) external payable onlyOperator {
         Pull storage p = pulls[pullId];
         if (p.status != PullStatus.SETTLED) revert BadPullStatus(pullId);
-        if (!_sellBackAllowed(p)) revert StrategyMismatch();
+        if (!_sellBackAllowed(pullId, p)) revert StrategyMismatch();
         uint256 amt = msg.value;
         if (amt == 0) revert ZeroAmount();
         p.status = PullStatus.SOLD;
@@ -375,8 +393,8 @@ contract MachineVault is ReentrancyGuardTransient {
         return false;
     }
 
-    function _sellBackAllowed(Pull storage p) internal view returns (bool) {
-        if (strategy == GachaTypes.Strategy.HIT_HUNTER) return p.cardValueUsd <= packPriceUsd;
+    function _sellBackAllowed(uint256 pullId, Pull storage p) internal view returns (bool) {
+        if (strategy == GachaTypes.Strategy.HIT_HUNTER) return p.cardValueUsd <= packPriceUsd || noEligibleHolder[pullId];
         return true; // RAFFLE (no eligible holder), DIVIDEND, BURN, SPLIT
     }
 

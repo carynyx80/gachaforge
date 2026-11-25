@@ -26,7 +26,7 @@ Primary sources:
 
 | Requirement | Verdict |
 |---|---|
-| Tax 1–10%, same buy and sell | **Yes [CONFIRMED].** `buyTaxRate` and `sellTaxRate` are each 100–1000 bps. Set both to the same value. |
+| Tax fixed at 2%, same buy and sell | **Yes [CONFIRMED].** `buyTaxRate` and `sellTaxRate` accept 100–1000 bps; GachaForge always sets both to 200 (fork-tested). |
 | Tax goes to the token's own GachaForge vault contract | **Yes [CONFIRMED].** Use `mktBps = 10000` with `beneficiary = vault` (Portal), or with a vault that our own factory creates (VaultPortal, permissionless). |
 | Paid from the first bonding-curve trade | **Yes [CONFIRMED].** On the curve, the tax is charged as an extra fee on top of the 1% curve fee (PreBond Tax). It reaches the TaxProcessor via `processBondingCurveTax`. |
 | Keeps flowing after graduation to PancakeSwap | **Yes [CONFIRMED].** After migration (PancakeSwap V2, always V2 for tax tokens) the token taxes main-pool trades, accumulates tokens, liquidates them to the quote token (BNB) and dispatches to the vault. |
@@ -231,7 +231,7 @@ interface IFlapTaxProcessor {
 
 ## 4. Tax mechanics [CONFIRMED unless marked]
 
-- **Range:** `buyTaxRate` and `sellTaxRate` are each 100–1000 bps. SPEC's integer 1–10% maps to 100, 200, ..., 1000. The flap.sh UI only offers 1/3/5/10%, but the contract accepts any value in range [CONFIRMED range; whether non-UI values like 2% display correctly on flap.sh is UNVERIFIED].
+- **Range:** `buyTaxRate` and `sellTaxRate` are each 100–1000 bps. GachaForge uses a **fixed 200 bps (2%) buy and sell** for every token; the creator no longer chooses. The flap.sh UI only offers 1/3/5/10%, but the contract accepts 200 [CONFIRMED on fork; whether 2% displays correctly on flap.sh is UNVERIFIED].
 - **Split of the post-protocol-fee tax:** `mktBps` goes to the beneficiary or vault. `deflationBps` is burned. `dividendBps` goes to the Dividend contract. `lpBps` becomes LP sent to dead. **For GachaForge: `mktBps=10000`, others 0.** With `dividendBps=0` a Dividend contract is still deployed, in tracker-only mode.
 - **Currency:** the vault receives the **quote token**. With `quoteToken = address(0)` that is native BNB.
   - **On the curve:** the tax is an extra fee in BNB, handed to the TaxProcessor (`processBondingCurveTax(quoteAmount)`).
@@ -332,7 +332,7 @@ interface IFlapLauncher {
         string symbol;
         string metaCid;        // from funcs.flap.sh/api/upload
         bytes32 salt;          // pre-mined so the token address ends in 7777 (Portal + TaxTokenV3 impl)
-        uint16 taxBps;         // 100..1000, multiple of 100; used for both buy and sell
+        uint16 taxBps;         // must be 200 (fixed 2%); used for both buy and sell
         uint256 creatorBuyWei; // msg.value forwarded as quoteAmt
     }
 
@@ -340,7 +340,7 @@ interface IFlapLauncher {
 
     /// Calls VaultPortal.newTokenV6WithVault with:
     ///  dexThresh=1, migratorType=1 (V2), dexId=0, lpFeeProfile=0, quoteToken=address(0),
-    ///  buyTaxRate=sellTaxRate=taxBps, taxDuration=MAX_ALLOWED, antiFarmerDuration=X,
+    ///  buyTaxRate=sellTaxRate=200, taxDuration=MAX_ALLOWED, antiFarmerDuration=X,
     ///  mktBps=10000, deflationBps=dividendBps=lpBps=0, minimumShareBalance=0,
     ///  dividendToken=address(0), commissionReceiver=address(0) (or treasury, see §8),
     ///  tokenVersion=6, vaultFactory=GACHA_VAULT_FACTORY, vaultData=abi.encode(creator, config...).
@@ -365,14 +365,14 @@ interface IFlapLauncher {
 ### `GachaVault` (one per token, created by `GachaVaultFactory`)
 
 - Inherits `VaultBaseV3`. `vaultQuoteToken() = address(0)`.
-- `receive()` runs `_sync()` only: `accountedQuote` delta, split 70/20/10 into internal buckets (`gachaPot`, `forgeBuyback`, `treasury`), emit `TaxReceived`. No external calls, so it never reverts.
+- `receive()` runs `_sync()` only: `accountedQuote` delta, split 7/3/90 into internal buckets (`gachaPot`, `forgeBuyback`, `treasury`), emit `TaxReceived`. No external calls, so it never reverts.
 - Separate keeper or Guardian functions:
   - `buyPack()`: Renaiss.
   - `buybackAndBurnForge(minOut)`: `Portal.swapExactInput` → transfer to dead.
   - `withdrawTreasury()`.
   - Every outflow decrements `accountedQuote` in the same tx.
 - Permissionless `sync()`.
-- `description()` states the 70/20/10 split and the protocol fee.
+- `description()` states the 7/3/90 (pot/buyback/treasury) split and the protocol fee.
 - Factory `newVault` deploys a `BeaconProxy` and stores `taxToken` (predicted). The vault must not call it during init.
 
 ### Fork tests to write before mainnet (these resolve the UNVERIFIED items)

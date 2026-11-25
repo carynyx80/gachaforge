@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { canOpenPull, decideOutcome, sellBackRate, splitProceeds } from '../src/core/index.js';
+import { BUYBACK_SHARE_BPS, canOpenPull, decideOutcome, POT_SHARE_BPS, sellBackRate, splitProceeds, splitTax, TAX_BPS, TREASURY_SHARE_BPS } from '../src/core/index.js';
+
+describe('tax economics', () => {
+  it('fixed 2% tax split 90% treasury / 7% pot / 3% $FORGE buyback', () => {
+    expect(TAX_BPS).toBe(200);
+    expect([TREASURY_SHARE_BPS, POT_SHARE_BPS, BUYBACK_SHARE_BPS]).toEqual([9000, 700, 300]);
+    expect(TREASURY_SHARE_BPS + POT_SHARE_BPS + BUYBACK_SHARE_BPS).toBe(10_000);
+    const s = splitTax(100);
+    expect(s.pot).toBeCloseTo(7, 9);
+    expect(s.buyback).toBeCloseTo(3, 9);
+    expect(s.treasury).toBeCloseTo(90, 9);
+  });
+});
 
 describe('decideOutcome', () => {
   const base = { cardValueUsd: 30, packPriceUsd: 28, eligibleCount: 3 };

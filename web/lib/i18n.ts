@@ -12,6 +12,7 @@ export const dict = {
     hero_title_1: 'TRADE MEMES.', hero_title_2: 'FORGE REAL CARDS.',
     hero_sub: 'Every trade fuels a real card pull. Rewards go to holders.',
     cta_launch: 'Launch token', cta_board: 'Explore board',
+    hero_tax: 'Tax {tax}% buy / {tax}% sell', hero_split_platform: '{platform}% → platform', hero_split_pot: '{pot}% → gacha pot', hero_split_buyback: '{buyback}% → $FORGE buyback & burn',
     score_title: 'Protocol Scoreboard',
     s_pots: 'Gacha Pots', s_packs: 'Packs Opened', s_cards: 'Cards Awarded', s_burned: 'Burned', s_launches: 'Launches',
     pulls_title: 'Recent Pulls', rip_title: 'About to Rip', board_title: 'Board',
@@ -21,7 +22,7 @@ export const dict = {
     curve: 'Bonding curve', mcap: 'Market cap', vol: '24h vol', opened: 'Opened', holders: 'Holders', pot: 'Gacha pot',
     col_card: 'Card', col_machine: 'Machine', col_result: 'Result', col_winner: 'Winner', col_time: 'Time',
     empty: 'No machines match these filters.', prev: 'Prev', next: 'Next',
-    footer_tag: 'Trade memes. Forge real cards.', footer_note: 'Not financial advice. Cards are custodied & graded via Renaiss. Tokens launch on flap.sh.',
+    footer_tag: 'Trade memes. Forge real cards.', footer_note: 'Not financial advice. Every token has a fixed {tax}% buy / {tax}% sell tax: {platform}% to the GachaForge platform, {pot}% to the gacha pot, {buyback}% to $FORGE buyback & burn. Cards are custodied & graded via Renaiss. Tokens launch on flap.sh.',
   },
   zh: {
     r_holders: '→ 持有人', r_burned: '已销毁',
@@ -34,6 +35,7 @@ export const dict = {
     hero_title_1: '交易 MEME，', hero_title_2: '锻造真卡。',
     hero_sub: '每一笔交易都在为真实卡牌抽取充能，奖励归持有者。',
     cta_launch: '发行代币', cta_board: '浏览看板',
+    hero_tax: '交易税 买入 {tax}% / 卖出 {tax}%', hero_split_platform: '{platform}% → 平台', hero_split_pot: '{pot}% → 扭蛋奖池', hero_split_buyback: '{buyback}% → $FORGE 回购销毁',
     score_title: '协议记分板',
     s_pots: '扭蛋奖池', s_packs: '已开卡包', s_cards: '已发卡牌', s_burned: '已销毁', s_launches: '已发行',
     pulls_title: '最新抽卡', rip_title: '即将开抽', board_title: '看板',
@@ -43,7 +45,7 @@ export const dict = {
     curve: '联合曲线', mcap: '市值', vol: '24h 成交量', opened: '已开', holders: '持有人', pot: '扭蛋奖池',
     col_card: '卡牌', col_machine: '机器', col_result: '结果', col_winner: '获得者', col_time: '时间',
     empty: '没有符合条件的机器。', prev: '上一页', next: '下一页',
-    footer_tag: '交易 MEME，锻造真卡。', footer_note: '不构成投资建议。卡牌由 Renaiss 托管与评级，代币在 flap.sh 发行。',
+    footer_tag: '交易 MEME，锻造真卡。', footer_note: '不构成投资建议。所有代币交易税固定为买入 {tax}% / 卖出 {tax}%：{platform}% 归 GachaForge 平台，{pot}% 进入扭蛋奖池，{buyback}% 用于回购销毁 $FORGE。卡牌由 Renaiss 托管与评级，代币在 flap.sh 发行。',
   },
 } as const;
 

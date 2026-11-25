@@ -75,7 +75,7 @@ abstract contract Base is Test {
     function _launch(GachaTypes.Strategy s) internal returns (MachineVault v, MockERC20 t) {
         GachaTypes.SplitBps memory sp =
             s == GachaTypes.Strategy.SPLIT ? GachaTypes.SplitBps(5000, 3000, 2000) : _noSplit();
-        return _launchWith(_params(s, GachaTypes.PackId.FORGE_28, 500, sp));
+        return _launchWith(_params(s, GachaTypes.PackId.FORGE_28, 200, sp));
     }
 
     function _launchWith(GachaForgeFactory.LaunchParams memory p) internal returns (MachineVault v, MockERC20 t) {

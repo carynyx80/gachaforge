@@ -32,7 +32,7 @@ contract GachaForgeFactory is AccessControl, Pausable, ReentrancyGuard {
         string meta;
         GachaTypes.PackId packId;
         GachaTypes.Strategy strategy;
-        uint16 taxBps; // 100..1000, whole percent
+        uint16 taxBps; // must be exactly GachaTypes.TAX_BPS (200 = 2% buy & sell)
         GachaTypes.SplitBps split; // SPLIT only, must sum to 10000; zero otherwise
         bytes32 salt; // creator-chosen; combined with msg.sender for the vault salt
         bytes extraData; // passed through to the flap.sh adapter
@@ -118,7 +118,7 @@ contract GachaForgeFactory is AccessControl, Pausable, ReentrancyGuard {
         nonReentrant
         returns (address token, address vault)
     {
-        if (p.taxBps < 100 || p.taxBps > 1000 || p.taxBps % 100 != 0) revert InvalidTax();
+        if (p.taxBps != GachaTypes.TAX_BPS) revert InvalidTax();
         if (p.strategy == GachaTypes.Strategy.SPLIT) {
             if (uint256(p.split.dividendBps) + p.split.burnBps + p.split.lpBps != 10_000) revert InvalidSplit();
         } else if (p.split.dividendBps != 0 || p.split.burnBps != 0 || p.split.lpBps != 0) {

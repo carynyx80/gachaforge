@@ -94,7 +94,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
       {/* strategy */}
       <div className="panel mt-6 flex flex-col gap-3 border-accent/40 bg-accent-soft/30 p-4 sm:flex-row sm:items-center">
         <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-3 py-1.5 font-display font-bold uppercase tracking-wider text-black">{info.icon} {info.title}</span>
-        <p className="text-sm text-fg/90">{info.long}{m.split && ` Ratio: ${m.split.dividendBps / 100}% dividend / ${m.split.burnBps / 100}% burn / ${m.split.lpBps / 100}% LP.`} <span className="text-muted">Tax {m.taxBps / 100}% · locked forever.</span></p>
+        <p className="text-sm text-fg/90">{info.long}{m.split && ` Ratio: ${m.split.dividendBps / 100}% dividend / ${m.split.burnBps / 100}% burn / ${m.split.lpBps / 100}% LP.`} <span className="text-muted">Tax {m.taxBps / 100}% · locked.</span></p>
       </div>
 
       {/* stats */}

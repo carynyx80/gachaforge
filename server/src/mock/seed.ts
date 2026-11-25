@@ -1,5 +1,5 @@
 import { keccak256, parseEther, stringToHex, type Hex } from 'viem';
-import { PACK_PRICE_USD, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
+import { PACK_PRICE_USD, splitTax, TAX_BPS, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
 import { excludedFor } from '../indexer/excluded.js';
 import { now, round2, type Ledger } from '../ledger.js';
 import type { Logger } from '../log.js';
@@ -77,7 +77,7 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
       pack,
       packPriceUsd: PACK_PRICE_USD[pack],
       strategy,
-      taxBps: int(rng, 1, 10) * 100,
+      taxBps: TAX_BPS,
       ...(strategy === 'SPLIT' ? { split: { dividendBps: 5000, burnBps: 3000, lpBps: 2000 } } : {}),
       stage: graduated ? 'GRADUATED' : 'CURVE',
       bondingCurvePct: graduated ? 100 : round2(5 + rng() * 90),
@@ -139,9 +139,15 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
   return ctx;
 }
 
-function mockTrade(ctx: MockContext, m: Machine, ts: number): Trade {
+/**
+ * Live trades are scaled up: the pot only gets 7% of a 2% tax (0.14% of volume), so ~1.2 BNB avg
+ * trades at ~0.67 trades/s give roughly one pull every 30–60s across all machines.
+ */
+const SIM_TRADE_SCALE = 2;
+
+function mockTrade(ctx: MockContext, m: Machine, ts: number, scale = 1): Trade {
   const { rng } = ctx;
-  const amountBnb = round4(0.01 + rng() ** 2 * 3);
+  const amountBnb = round4((0.01 + rng() ** 2 * 3) * scale);
   const priceUsdPerToken = m.marketCapUsd / 1e9;
   return {
     side: rng() < 0.58 ? 'BUY' : 'SELL',
@@ -236,14 +242,15 @@ export function startSimulator(ctx: MockContext, intervalMs: number, log?: Logge
     const burst = int(rng, 1, 3);
     for (let i = 0; i < burst; i++) {
       const m = machines[Math.floor(rng() * machines.length)];
-      const t = mockTrade(ctx, m, now());
+      const t = mockTrade(ctx, m, now(), SIM_TRADE_SCALE);
       await ledger.trade(m.address, t);
       // move some balance so holder counts / odds drift
       const tokensBase = BigInt(Math.floor(t.tokens)) * E18;
       const pool = JSON.parse((await ledger.repo.getMeta(`pools:${m.address}`)) ?? '[]')[0] as string;
       if (pool) await (t.side === 'BUY' ? ledger.repo.applyTransfer(m.address, pool, t.trader, tokensBase) : ledger.repo.applyTransfer(m.address, t.trader, pool, 0n));
       const taxUsd = t.taxUsd;
-      const potShare = round2(taxUsd * 0.7);
+      const share = splitTax(taxUsd);
+      const potShare = round2(share.pot);
       const drift = 1 + (rng() - 0.48) * 0.04;
       const curve = m.stage === 'CURVE' ? Math.min(100, round2(m.bondingCurvePct + rng() * 0.8)) : 100;
       await ledger.repo.upsertMachine({
@@ -257,7 +264,7 @@ export function startSimulator(ctx: MockContext, intervalMs: number, log?: Logge
       await refreshCounts(ctx, m.address);
       const updated = await ledger.tax(m.address, taxUsd, potShare);
       if (rng() < 0.08) {
-        await ledger.burn({ id: `sim-buyback-${Date.now()}-${i}`, kind: 'BUYBACK', amount: round2(10_000 + rng() * 400_000), txHash: txFrom(rng), timestamp: now() }, round2(taxUsd * 0.2 * 20));
+        await ledger.burn({ id: `sim-buyback-${Date.now()}-${i}`, kind: 'BUYBACK', amount: round2(10_000 + rng() * 400_000), txHash: txFrom(rng), timestamp: now() }, round2(share.buyback * 20)); // buyback batches several taxes
       }
       if (updated && updated.potUsd >= updated.packPriceUsd) await simulatePull(ctx, m.address);
     }

@@ -28,7 +28,7 @@ contract SelfTaxRouter is ILaunchpadRouter {
         refundBps = b;
     }
 
-    uint256 public taxBps = 500;
+    uint256 public taxBps = 200;
     address public taxReceiver;
 
     function setTaxReceiver(address r) external {
@@ -88,7 +88,7 @@ contract ReviewTest is Base {
 
     // ------------------------------------------------------------------ M: tax received during own buyback
     /// Tax that lands in the vault during buybackAndBurn / addLiquidityLocked (guard entered, receive()
-    /// skips _sync) is swept into burnReserve/lpReserve by _creditRefund instead of the 70/20/10 split.
+    /// skips _sync) is swept into burnReserve/lpReserve by _creditRefund instead of the 7/3/90 pot/buyback/treasury split.
     function test_Review_TaxDuringBuybackSkipsSplit() public {
         (MachineVault v, MockERC20 t) = _launch(GachaTypes.Strategy.BURN);
         t; // silence
@@ -104,11 +104,11 @@ contract ReviewTest is Base {
         uint256 burnerBefore = address(burner).balance;
 
         vm.prank(operator);
-        v.buybackAndBurn(1 ether, 0); // 0.05 BNB tax comes back mid-call
+        v.buybackAndBurn(1 ether, 0); // 0.02 BNB (2%) tax comes back mid-call
 
-        // 0.05 BNB of fresh tax: 70% to pot, 20% to $FORGE burner, not swept into burnReserve
-        assertEq(v.pot() - potBefore, 0.035 ether, "pot did not get 70% of tax");
-        assertEq(address(burner).balance - burnerBefore, 0.01 ether, "burner did not get 20%");
+        // 0.02 BNB of fresh tax: 7% to pot, 3% to $FORGE burner, not swept into burnReserve
+        assertEq(v.pot() - potBefore, 0.0014 ether, "pot did not get 7% of tax");
+        assertEq(address(burner).balance - burnerBefore, 0.0006 ether, "burner did not get 3%");
         assertEq(v.burnReserve(), 0, "tax not miscredited as refund");
         assertEq(address(v).balance, v.trackedBalance());
     }
@@ -128,7 +128,7 @@ contract ReviewTest is Base {
         vm.prank(operator);
         v.buybackAndBurn(1 ether, 0);
         assertEq(v.burnReserve(), 0.2 ether, "refund back to burnReserve");
-        assertEq(v.pot() - potBefore, 0.035 ether, "tax split");
+        assertEq(v.pot() - potBefore, 0.0014 ether, "tax split");
         assertEq(address(v).balance, v.trackedBalance());
     }
 
@@ -152,9 +152,9 @@ contract ReviewTest is Base {
         }
         uint256 total = 4 ether + 161 ether;
         v.sync(); // permissionless split + forward
-        assertEq(v.pot(), (total * 7000) / 10000);
-        assertEq(address(burner).balance, (total * 2000) / 10000);
-        assertEq(treasury.balance, total - (total * 7000) / 10000 - (total * 2000) / 10000);
+        assertEq(v.pot(), (total * 700) / 10000);
+        assertEq(address(burner).balance, (total * 300) / 10000);
+        assertEq(treasury.balance, total - (total * 700) / 10000 - (total * 300) / 10000);
     }
 
     // ------------------------------------------------------------------ L: BuybackBurner stats

@@ -242,7 +242,7 @@ export class Indexer {
       return;
     }
 
-    // $FORGE BuybackBurner (platform 20% share)
+    // $FORGE BuybackBurner (platform 3% tax share)
     if (this.buybackBurner && addr === this.buybackBurner) {
       if (l.eventName === 'Buyback') {
         await this.ledger.burn({ id: `${tx}-${l.logIndex}`, kind: 'BUYBACK', amount: bnb(a.forgeBought), txHash: tx, timestamp: ts }, bnb(a.bnbSpent) * px);

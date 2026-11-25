@@ -70,7 +70,7 @@ export class Ledger {
     return next;
   }
 
-  /** Tax landed in the vault. `potUsd` is the 70% gacha share. */
+  /** Tax landed in the vault. `potUsd` is the gacha-pot share (POT_SHARE_BPS, 7%; 90% treasury, 3% $FORGE buyback). */
   async tax(address: string, totalUsd: number, potUsd: number, ts = now()) {
     const m = await this.updateMachine(address, (m) => ({ potUsd: round2(m.potUsd + potUsd) }));
     if (m) await this.activity(m, 'TAX', `tax ${usd(potUsd)} → gacha pot`, totalUsd, ts);

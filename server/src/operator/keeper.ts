@@ -62,7 +62,7 @@ export class Keeper {
   }
 
   /**
-   * The vault's receive() only accepts BNB; the 70/20/10 split happens in the permissionless
+   * The vault's receive() only accepts BNB; the 7/3/90 pot/buyback/treasury split happens in the permissionless
    * sync(). Call it whenever the vault holds more BNB than its tracked buckets.
    */
   async syncVault(vault: Hex) {

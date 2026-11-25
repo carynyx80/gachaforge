@@ -82,6 +82,34 @@ contract StrategyTest is Base {
         v.recordRaffle(id, block.number - 1, SNAP, SEED, trader);
     }
 
+    function test_HitHunter_HitWithNoEligibleHolderCanSellBack() public {
+        (MachineVault v,) = _launch(GachaTypes.Strategy.HIT_HUNTER);
+        uint256 id = _pullAndSettle(v, 29); // hit
+        // a stranger cannot unlock the sell-back
+        vm.prank(trader);
+        vm.expectRevert();
+        v.recordNoEligible(id, block.number - 1, SNAP);
+        vm.prank(operator);
+        v.recordNoEligible(id, block.number - 1, SNAP);
+        assertTrue(v.noEligibleHolder(id));
+        // a raffle is still possible instead, but once sold it is final
+        vm.prank(operator);
+        v.depositProceeds{value: 0.03 ether}(id);
+        assertEq(v.burnReserve(), 0.03 ether);
+        vm.prank(operator);
+        vm.expectRevert(abi.encodeWithSelector(MachineVault.BadPullStatus.selector, id));
+        v.recordRaffle(id, block.number - 1, SNAP, SEED, trader);
+        assertEq(address(v).balance, v.trackedBalance());
+    }
+
+    function test_HitHunter_NoEligibleRejectedForMiss() public {
+        (MachineVault v,) = _launch(GachaTypes.Strategy.HIT_HUNTER);
+        uint256 id = _pullAndSettle(v, 28); // miss: sell-back already allowed, flag not needed
+        vm.prank(operator);
+        vm.expectRevert(MachineVault.StrategyMismatch.selector);
+        v.recordNoEligible(id, block.number - 1, SNAP);
+    }
+
     function test_HitHunter_MissSellsAndBurns() public {
         (MachineVault v, MockERC20 t) = _launch(GachaTypes.Strategy.HIT_HUNTER);
         uint256 id = _pullAndSettle(v, 28); // == price -> not a hit
@@ -225,7 +253,7 @@ contract StrategyTest is Base {
         uint16 l = 10_000 - d - b;
         uint256 a = bound(uint256(amt), 1, 1_000 ether);
         GachaForgeFactory.LaunchParams memory p = _params(
-            GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_28, 500, GachaTypes.SplitBps(d, b, l)
+            GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_28, 200, GachaTypes.SplitBps(d, b, l)
         );
         (MachineVault v,) = _launchWith(p);
         uint256 id = _pullAndSettle(v, 100);
@@ -251,7 +279,7 @@ contract StrategyTest is Base {
 
     function test_PotSurvivesFullLifecycle() public {
         (MachineVault v,) = _launch(GachaTypes.Strategy.BURN);
-        _tax(v, 1 ether);
+        _tax(v, 10 ether); // pot 0.7 BNB (7%)
         uint256 ts = block.timestamp;
         for (uint256 i; i < 5; i++) {
             uint256 id = _pullAndSettle(v, 10);
@@ -274,13 +302,13 @@ contract BuybackBurnerTest is Base {
         (MachineVault b,) = _launch(GachaTypes.Strategy.RAFFLE);
         _tax(a, 1 ether);
         _tax(b, 2 ether);
-        assertEq(address(burner).balance, 0.6 ether);
-        assertEq(burner.totalBnbReceived(), 0.6 ether);
+        assertEq(address(burner).balance, 0.09 ether); // 3% buyback share
+        assertEq(burner.totalBnbReceived(), 0.09 ether);
     }
 
     function test_BuybackBurnsForge() public {
         (MachineVault a,) = _launch(GachaTypes.Strategy.BURN);
-        _tax(a, 1 ether);
+        _tax(a, 10 ether); // 3% => 0.3 BNB to the burner
         uint256 out = 0.2 ether * router.rate();
         vm.expectEmit(address(burner));
         emit BuybackBurner.Buyback(0.2 ether, out);
@@ -289,7 +317,7 @@ contract BuybackBurnerTest is Base {
         vm.prank(operator);
         burner.buybackAndBurn(0.2 ether, out);
         assertEq(forge.balanceOf(DEAD), out);
-        assertEq(address(burner).balance, 0);
+        assertEq(address(burner).balance, 0.1 ether);
         assertEq(burner.totalForgeBurned(), out);
         assertEq(burner.totalBnbSpent(), 0.2 ether);
     }

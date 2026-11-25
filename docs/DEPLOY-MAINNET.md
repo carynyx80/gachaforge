@@ -9,7 +9,7 @@ What gets deployed (5 contracts, by `contracts/script/Deploy.s.sol`):
 | `TimelockController` | Admin of the factory and the burner. Proposer and executor are the company wallet. Delay is 48 h. Self-administered (admin = 0). |
 | `FlapLauncher` | flap.sh adapter. Uses Portal mode (`Portal.newTokenV6`, beneficiary = vault). |
 | `FlapRouter` | Buys through `Portal.swapExactInput` and adds LP through PancakeSwap V2. |
-| `BuybackBurner` | Collects the 20% share of every vault. `$FORGE` is unset at deploy, so BNB accumulates. |
+| `BuybackBurner` | Collects the 3% $FORGE-buyback share of every vault's tax. `$FORGE` is unset at deploy, so BNB accumulates. |
 | `GachaForgeFactory` | Launches machines and deploys one `MachineVault` per token. |
 
 The deployer wallet keeps **no** role after the script. It grants every admin role to the timelock and then renounces its own.
@@ -113,7 +113,7 @@ Fork simulation at block 135,687,596 (2026-11-25):
 4. Fund the operator hot wallet with a little BNB for gas only. Keep its balance small.
 5. Launch tokens with a salt whose Portal CREATE2 clone address ends in `7777`. `FlapLauncher.predictToken(salt)` predicts it, and the launcher reverts otherwise. Mining takes about 65k hashes. Optionally front-run-protect with `Portal.lockSalt` (0.01 BNB), though note that the salt then belongs to the locker, which is the launcher contract here, not the user.
 6. Keeper: periodically call `TaxProcessor.dispatch()` for each token. `FlapLauncher.flushTax(token)` does this. Then call `MachineVault.sync()` so the pot reflects the tax.
-7. **When `$FORGE` exists:** the company wallet schedules `BuybackBurner.setForge(<FORGE>)` on the timelock, waits 48 h, then executes it. This is one-shot and cannot be changed after. Until then, the 20% share sits in BuybackBurner as BNB and can only leave through a `$FORGE` buy.
+7. **When `$FORGE` exists:** the company wallet schedules `BuybackBurner.setForge(<FORGE>)` on the timelock, waits 48 h, then executes it. This is one-shot and cannot be changed after. Until then, the 3% buyback share sits in BuybackBurner as BNB and can only leave through a `$FORGE` buy.
 
    ```bash
    # calldata for the timelock schedule/execute (sign with your wallet, e.g. in BscScan "Write Contract")
@@ -132,8 +132,9 @@ Fork simulation at block 135,687,596 (2026-11-25):
 | VaultPortal mode, our launcher as `IVaultFactory` | Also works on the fork. The factory is unregistered, so the flap UI marks it UNVERIFIED. |
 | `taxDuration` = 100 years | Accepted |
 | Buy tax and sell tax both reach the vault | Confirmed through `swapExactInput` both ways, then `dispatch()` (permissionless) |
-| Share of the nominal tax that reaches the vault | **95%**: a 5% tax gives 4.75% of the buy to the vault. Flap takes 5% of the tax, or 0.25% of volume. |
-| `sync()` split | Exactly 70% pot, 20% BuybackBurner, 10% treasury (the company wallet) |
+| Tax rate | Fixed **2% buy / 2% sell** (200 bps) for every token. The factory, vault and FlapLauncher reject any other value. |
+| Share of the nominal tax that reaches the vault | **90%**: the 2% tax gives 1.8% of the buy to the vault. Flap takes 10% of the tax, or 0.2% of volume. |
+| `sync()` split | Exactly 7% pot, 3% BuybackBurner, 90% treasury (the company wallet `0x4906…a7c`, takes the rounding remainder). Set by `MachineVault.POT_BPS = 700` / `BUYBACK_BPS = 300`. |
 | Supply | 1,000,000,000 × 1e18 |
 
 The fork tests did not check graduation to PancakeSwap or the post-graduation tax liquidation. Test both before relying on them.
@@ -149,7 +150,7 @@ The fork tests did not check graduation to PancakeSwap or the post-graduation ta
 - **Operator trust.** The backend hot wallet (`OPERATOR_ROLE`) spends pots on Renaiss packs, settles results, records raffle winners and dividend roots, and runs buybacks. It can mis-report card values, pick raffle winners (verifiable only off-chain through the published snapshot and seed) or set bad dividend roots. Slippage caps (pack price + 10%) bound each pull, but a compromised operator can still drain pots pull by pull to whatever `paymentReceiver` is set. The timelock can revoke the role, but only after 48 h. The operator can pause instantly, and only the company wallet can unpause.
 - **Flap admin can reroute tax.** `Portal.updateTaxTokenAddresses` (Flap `DEFAULT_ADMIN`/`TAX_MANAGER`) can change any token's tax beneficiary away from our vault. Flap's own contracts are upgradeable proxies. We cannot prevent either. Monitor the events in §5.8.
 - **Tax duration is finite.** Tax stops after `taxDuration` (100 years configured). It does not apply to trades through non-main pools after the anti-farmer window (3 days), so someone could route volume through a different pool untaxed.
-- **Protocol fee.** Only about 95% of the nominal tax reaches the vault, because flap takes about 0.25% of volume at a 5% tax.
-- **`$FORGE` unset.** The 20% buyback share accumulates in BuybackBurner with no way out other than a `$FORGE` buy once `setForge` is executed. If `$FORGE` never launches, that BNB stays locked.
+- **Protocol fee.** Only about 90% of the nominal tax reaches the vault, because flap takes about 0.2% of volume at the fixed 2% tax.
+- **`$FORGE` unset.** The 3% buyback share accumulates in BuybackBurner with no way out other than a `$FORGE` buy once `setForge` is executed. If `$FORGE` never launches, that BNB stays locked.
 - **Chainlink dependency.** Pulls revert if the feed is stale (over 1 h old) or invalid. The timelock can repoint the feed.
 - **Portal mode and UI.** In Portal mode flap.sh does not show our vault as a "vault" (`isVault=false`). Nothing on-chain stops a third party from launching a non-GachaForge token that names one of our predicted vault addresses as beneficiary. Such a token would not be registered in the factory.

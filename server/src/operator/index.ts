@@ -121,6 +121,12 @@ export class Operator {
       return;
     }
 
+    // A HIT_HUNTER hit with no eligible holder must be published on-chain before the vault allows a sell-back.
+    if (m.strategy === 'HIT_HUNTER' && cardValueWholeUsd > m.packPriceUsd) {
+      await this.write(v, 'recordNoEligible', [pullId, snapshotBlock, plan.snapshotHash]);
+      this.log.info({ pullKey }, 'hit had no eligible holder; recorded before sell-back');
+    }
+
     // 5. sell back → deposit proceeds (vault routes by strategy into pot/dividend/burn/lp buckets)
     const sold = await this.provider.sellBack(card.id);
     // TODO(renaiss): Renaiss may pay out in BNB directly; until then convert at the configured price.

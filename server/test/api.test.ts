@@ -31,6 +31,12 @@ describe('API', () => {
     expect(Object.keys(body).sort()).toEqual(['burnedUsd', 'cardsAwarded', 'launches', 'packsOpened', 'potsUsd']);
     expect(body.launches).toBe(19);
   });
+  it('every machine has the fixed 2% tax', async () => {
+    const { body } = await get('/api/machines?pageSize=100');
+    const items = (body.items ?? body) as { taxBps: number }[];
+    expect(items.length).toBeGreaterThan(0);
+    for (const m of items) expect(m.taxBps).toBe(200);
+  });
   it('CORS for the frontend origin', async () => {
     const r = await app.inject({ method: 'GET', url: '/api/stats', headers: { origin: 'http://localhost:3000' } });
     expect(r.headers['access-control-allow-origin']).toBe('http://localhost:3000');

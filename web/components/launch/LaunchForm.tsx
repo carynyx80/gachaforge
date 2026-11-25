@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { PackId, Strategy } from '@/lib/types';
 import { PACK_PRICE } from '@/lib/types';
+import { FLAP_CUT_PCT, SPLIT, TAX_BPS, TAX_PCT } from '@/lib/economics';
 import { STRATEGY_INFO } from '@/lib/strategies';
 import { usd } from '@/lib/format';
 import { parseEther, parseEventLogs, type Hex } from 'viem';
@@ -44,7 +45,6 @@ export function LaunchForm() {
   const [pack, setPack] = useState<PackId>('FORGE_48');
   const [strategy, setStrategy] = useState<Strategy>('RAFFLE');
   const [split, setSplit] = useState({ dividend: 50, burn: 30, lp: 20 });
-  const [tax, setTax] = useState(5);
   const [buy, setBuy] = useState('0.1');
 
   const setPart = (k: keyof typeof split, v: number) => {
@@ -82,7 +82,7 @@ export function LaunchForm() {
     const receipt = await tx.run(() => writeContractAsync({
       address: factory, abi: gachaForgeFactoryAbi, functionName: 'launch', chainId: bsc.id,
       // TODO(meta): upload image + metadata via flap (funcs.flap.sh/api/upload) and pass the CID here.
-      args: [{ name: name.trim(), symbol: t, meta: '', packId: PACK_INDEX[pack], strategy: STRATEGY_INDEX[strategy], taxBps: tax * 100, split: sp, salt, extraData: '0x' }],
+      args: [{ name: name.trim(), symbol: t, meta: '', packId: PACK_INDEX[pack], strategy: STRATEGY_INDEX[strategy], taxBps: TAX_BPS, split: sp, salt, extraData: '0x' }],
       value: parseEther(String(buyBnb)),
     }), `Launch $${t}`);
     if (receipt) {
@@ -158,14 +158,15 @@ export function LaunchForm() {
                 <p className="text-xs text-muted">Before graduation the LP share is burned instead.</p>
               </div>
             )}
-            <div className="mt-5">
-              <div className="flex justify-between text-sm"><span className="font-semibold">Trading tax (buy & sell)</span><span className="font-mono text-accent">{tax}%</span></div>
-              <input type="range" min={1} max={10} step={1} value={tax} onChange={(e) => setTax(Number(e.target.value))} className="mt-2 w-full accent-[#B6FF2E]" />
-              <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{(tax * 0.7).toFixed(2)}%</div><div className="text-muted">gacha pot</div></div>
-                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{(tax * 0.2).toFixed(2)}%</div><div className="text-muted">$FORGE burn</div></div>
-                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{(tax * 0.1).toFixed(2)}%</div><div className="text-muted">treasury</div></div>
+            <div className="mt-5 rounded-lg border border-line bg-bg p-4">
+              <div className="flex justify-between text-sm"><span className="font-semibold">Trading tax</span><span className="font-mono text-accent">{TAX_PCT}% buy / {TAX_PCT}% sell</span></div>
+              <p className="mt-1 text-xs text-muted">Fixed for every GachaForge token and locked at launch. The creator receives 0%.</p>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{SPLIT.platform}%</div><div className="text-muted">GachaForge platform</div></div>
+                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{SPLIT.pot}%</div><div className="text-muted">gacha pot</div></div>
+                <div className="rounded border border-line p-2"><div className="font-mono text-fg">{SPLIT.buyback}%</div><div className="text-muted">$FORGE buyback & burn</div></div>
               </div>
+              <p className="mt-2 text-xs text-muted">flap.sh keeps {FLAP_CUT_PCT}% of the tax before it reaches GachaForge; the split applies to the rest.</p>
             </div>
           </Step>
 
@@ -188,7 +189,7 @@ export function LaunchForm() {
             </div>
             <div className="space-y-3 p-4">
               <div className="flex items-baseline justify-between"><span className="font-semibold">{name || 'Your machine'}</span><span className="font-display font-bold text-glow">${t || 'TICKER'}</span></div>
-              <div className="text-xs text-muted">{STRATEGY_INFO[strategy].title} · {tax}% tax · ${PACK_PRICE[pack]} pack</div>
+              <div className="text-xs text-muted">{STRATEGY_INFO[strategy].title} · {TAX_PCT}% tax · ${PACK_PRICE[pack]} pack</div>
               {strategy === 'SPLIT' && <div className="text-xs text-muted">{split.dividend}/{split.burn}/{split.lp} dividend/burn/LP</div>}
               <div className="rounded-md border border-accent/30 bg-accent-soft/50 p-2.5 text-xs"><div className="flex justify-between"><span className="text-muted">Gacha pot</span><span className="font-mono text-accent">{usd(PACK_PRICE[pack])} to rip</span></div></div>
               <div className="space-y-1 border-t border-line pt-3 text-sm">

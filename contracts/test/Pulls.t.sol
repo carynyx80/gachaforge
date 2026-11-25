@@ -33,8 +33,8 @@ contract PullTest is Base {
 
     function test_RevertPotBelowPrice() public {
         uint256 price = _price28();
-        // pot just below price: tax*0.7 < price
-        _tax(v, (price * 10_000) / 7_000 - 10);
+        // pot just below price: tax*0.07 < price
+        _tax(v, (price * 10_000) / 700 - 10);
         uint256 pot = v.pot();
         assertLt(pot, price);
         vm.prank(operator);
@@ -44,7 +44,7 @@ contract PullTest is Base {
 
     function test_OpenPullAtThreshold() public {
         uint256 price = _price28();
-        _tax(v, (price * 10_000) / 7_000 + 10);
+        _tax(v, (price * 10_000) / 700 + 10);
         assertGe(v.pot(), price);
         assertTrue(v.canOpenPull());
         vm.prank(operator);
@@ -61,7 +61,7 @@ contract PullTest is Base {
         assertTrue(v.canOpenPull());
         vm.prank(operator);
         v.openPull(_price28());
-        assertEq(v.pot(), 0.7 ether - _price28());
+        assertEq(v.pot(), 0.07 ether - _price28());
     }
 
     function test_CapAtPlus10Percent() public {
@@ -77,7 +77,7 @@ contract PullTest is Base {
 
     function test_CapLimitedByPot() public {
         uint256 price = _price28();
-        _tax(v, (price * 10_000) / 7_000 + 1000); // pot ~= price
+        _tax(v, (price * 10_000) / 700 + 1000); // pot ~= price
         uint256 pot = v.pot();
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSelector(MachineVault.PotTooLow.selector, pot, pot + 1));
@@ -192,7 +192,7 @@ contract PullTest is Base {
     }
 
     function test_PriceMoveChangesThreshold() public {
-        _tax(v, 0.1 ether); // pot 0.07 BNB
+        _tax(v, 1 ether); // pot 0.07 BNB
         feed.set(300e8, block.timestamp); // $28 = 0.0933 BNB
         vm.prank(operator);
         vm.expectRevert();
@@ -219,7 +219,7 @@ contract PullTest is Base {
         assertFalse(v.canOpenPull());
         // tax intake still works while paused
         _tax(v, 1 ether);
-        assertEq(v.pot(), 7.7 ether);
+        assertEq(v.pot(), 0.77 ether);
         vm.prank(pauser);
         vm.expectRevert();
         factory.unpause();

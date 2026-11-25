@@ -13,7 +13,7 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 contract FactoryTest is Base {
     function test_LaunchWiresVaultAsTaxReceiver() public {
         GachaForgeFactory.LaunchParams memory p =
-            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_48, 300, _noSplit());
+            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_48, 200, _noSplit());
         address predicted = factory.predictVault(creator, p.salt);
 
         vm.deal(creator, 1 ether);
@@ -22,7 +22,7 @@ contract FactoryTest is Base {
 
         assertEq(vault, predicted, "CREATE2 prediction");
         assertEq(flap.taxReceiverOf(token), vault, "tax receiver = vault");
-        assertEq(flap.taxBpsOf(token), 300);
+        assertEq(flap.taxBpsOf(token), 200);
         assertEq(flap.lastValue(), 0.5 ether, "initial buy forwarded");
         assertEq(factory.vaultOf(token), vault);
         assertEq(factory.tokenOf(vault), token);
@@ -35,7 +35,7 @@ contract FactoryTest is Base {
         assertEq(v.token(), token);
         assertEq(v.packPriceUsd(), 48);
         assertEq(uint8(v.strategy()), uint8(GachaTypes.Strategy.RAFFLE));
-        assertEq(v.taxBps(), 300);
+        assertEq(v.taxBps(), 200);
         assertEq(v.treasury(), treasury);
         assertEq(v.buybackBurner(), address(burner));
         assertEq(address(v.factory()), address(factory));
@@ -43,29 +43,29 @@ contract FactoryTest is Base {
 
     function test_LaunchEmitsEvent() public {
         GachaForgeFactory.LaunchParams memory p =
-            _params(GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_88, 1000, GachaTypes.SplitBps(4000, 4000, 2000));
+            _params(GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_88, 200, GachaTypes.SplitBps(4000, 4000, 2000));
         address predicted = factory.predictVault(creator, p.salt);
         vm.expectEmit(false, true, true, true);
         emit GachaForgeFactory.MachineLaunched(
-            address(0), predicted, creator, GachaTypes.PackId.FORGE_88, GachaTypes.Strategy.SPLIT, 1000, 4000, 4000, 2000, 0
+            address(0), predicted, creator, GachaTypes.PackId.FORGE_88, GachaTypes.Strategy.SPLIT, 200, 4000, 4000, 2000, 0
         );
         _launchWith(p);
     }
 
     function test_PackPrices() public {
         (MachineVault a,) =
-            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 100, _noSplit()));
+            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 200, _noSplit()));
         (MachineVault b,) =
-            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_48, 100, _noSplit()));
+            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_48, 200, _noSplit()));
         (MachineVault c,) =
-            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_88, 100, _noSplit()));
+            _launchWith(_params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_88, 200, _noSplit()));
         assertEq(a.packPriceUsd(), 28);
         assertEq(b.packPriceUsd(), 48);
         assertEq(c.packPriceUsd(), 88);
     }
 
     function test_RevertInvalidTax() public {
-        uint16[5] memory bad = [uint16(0), 50, 150, 1100, 2000];
+        uint16[8] memory bad = [uint16(0), 100, 199, 201, 300, 500, 1000, 2000];
         for (uint256 i; i < bad.length; i++) {
             GachaForgeFactory.LaunchParams memory p =
                 _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, bad[i], _noSplit());
@@ -75,24 +75,22 @@ contract FactoryTest is Base {
         }
     }
 
-    function test_AllValidTaxes() public {
-        for (uint16 t = 100; t <= 1000; t += 100) {
-            (MachineVault v,) =
-                _launchWith(_params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, t, _noSplit()));
-            assertEq(v.taxBps(), t);
-        }
+    function test_OnlyFixedTaxAccepted() public {
+        (MachineVault v,) =
+            _launchWith(_params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, 200, _noSplit()));
+        assertEq(v.taxBps(), 200);
     }
 
     function test_RevertInvalidSplit() public {
         GachaForgeFactory.LaunchParams memory p = _params(
-            GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_28, 500, GachaTypes.SplitBps(5000, 3000, 1000)
+            GachaTypes.Strategy.SPLIT, GachaTypes.PackId.FORGE_28, 200, GachaTypes.SplitBps(5000, 3000, 1000)
         );
         vm.prank(creator);
         vm.expectRevert(GachaForgeFactory.InvalidSplit.selector);
         factory.launch(p);
 
         // non-SPLIT strategy with a split set
-        p = _params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 500, GachaTypes.SplitBps(10000, 0, 0));
+        p = _params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 200, GachaTypes.SplitBps(10000, 0, 0));
         vm.prank(creator);
         vm.expectRevert(GachaForgeFactory.InvalidSplit.selector);
         factory.launch(p);
@@ -100,7 +98,7 @@ contract FactoryTest is Base {
 
     function test_SameSaltDifferentCreatorsDifferentVaults() public {
         GachaForgeFactory.LaunchParams memory p =
-            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, 500, _noSplit());
+            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, 200, _noSplit());
         assertTrue(factory.predictVault(creator, p.salt) != factory.predictVault(trader, p.salt));
         _launchWith(p);
         vm.prank(trader);
@@ -116,7 +114,7 @@ contract FactoryTest is Base {
         vm.prank(pauser);
         factory.pause();
         GachaForgeFactory.LaunchParams memory p =
-            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, 500, _noSplit());
+            _params(GachaTypes.Strategy.RAFFLE, GachaTypes.PackId.FORGE_28, 200, _noSplit());
         vm.prank(creator);
         vm.expectRevert(Pausable.EnforcedPause.selector);
         factory.launch(p);
@@ -178,13 +176,13 @@ contract TaxSplitTest is Base {
 
     function test_SplitOnReceiveThenSync() public {
         _tax(v, 1 ether);
-        assertEq(v.pot(), 0.7 ether);
-        assertEq(address(burner).balance, 0.2 ether);
-        assertEq(treasury.balance, 0.1 ether);
-        assertEq(address(v).balance, 0.7 ether);
+        assertEq(v.pot(), 0.07 ether);
+        assertEq(address(burner).balance, 0.03 ether);
+        assertEq(treasury.balance, 0.9 ether);
+        assertEq(address(v).balance, 0.07 ether);
         assertEq(v.buybackOwed(), 0);
         assertEq(v.treasuryOwed(), 0);
-        assertEq(burner.totalBnbReceived(), 0.2 ether);
+        assertEq(burner.totalBnbReceived(), 0.03 ether);
     }
 
     function test_LowGasTransferDoesNotRevert_ThenSync() public {
@@ -193,17 +191,17 @@ contract TaxSplitTest is Base {
         assertEq(v.pot(), 0, "not split yet");
         assertEq(address(v).balance, 1 ether);
         v.sync();
-        assertEq(v.pot(), 0.7 ether);
-        assertEq(address(burner).balance, 0.2 ether);
-        assertEq(treasury.balance, 0.1 ether);
+        assertEq(v.pot(), 0.07 ether);
+        assertEq(address(burner).balance, 0.03 ether);
+        assertEq(treasury.balance, 0.9 ether);
     }
 
     function test_SyncIdempotent() public {
         _tax(v, 1 ether);
         v.sync();
         v.sync();
-        assertEq(v.pot(), 0.7 ether);
-        assertEq(treasury.balance, 0.1 ether);
+        assertEq(v.pot(), 0.07 ether);
+        assertEq(treasury.balance, 0.9 ether);
     }
 
     function test_EmitsTaxReceived() public {
@@ -211,12 +209,14 @@ contract TaxSplitTest is Base {
         (bool ok,) = address(v).call{value: 1 ether}("");
         assertTrue(ok);
         vm.expectEmit(address(v));
-        emit MachineVault.TaxReceived(1 ether, 0.7 ether, 0.2 ether, 0.1 ether);
+        emit MachineVault.TaxReceived(1 ether, 0.07 ether, 0.03 ether, 0.9 ether);
         v.sync();
     }
 
     function test_SplitConstants() public view {
         assertEq(v.POT_BPS() + v.BUYBACK_BPS() + v.TREASURY_BPS(), 10_000);
+        assertEq(v.TREASURY_BPS(), 9_000);
+        assertEq(v.POT_BPS() + v.BUYBACK_BPS(), 1_000);
     }
 
     function test_ForwardFailureKeepsOwedAndDoesNotRevert() public {
@@ -225,17 +225,17 @@ contract TaxSplitTest is Base {
         vm.prank(admin);
         factory.setTreasury(address(bad));
         GachaForgeFactory.LaunchParams memory p =
-            _params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 500, _noSplit());
+            _params(GachaTypes.Strategy.BURN, GachaTypes.PackId.FORGE_28, 200, _noSplit());
         (MachineVault v2,) = _launchWith(p);
         _tax(v2, 1 ether);
-        assertEq(v2.pot(), 0.7 ether);
-        assertEq(v2.treasuryOwed(), 0.1 ether);
+        assertEq(v2.pot(), 0.07 ether);
+        assertEq(v2.treasuryOwed(), 0.9 ether);
         assertEq(v2.buybackOwed(), 0);
-        assertEq(address(v2).balance, 0.8 ether);
+        assertEq(address(v2).balance, 0.97 ether);
         // more tax still accounted correctly
         _tax(v2, 1 ether);
-        assertEq(v2.pot(), 1.4 ether);
-        assertEq(v2.treasuryOwed(), 0.2 ether);
+        assertEq(v2.pot(), 0.14 ether);
+        assertEq(v2.treasuryOwed(), 1.8 ether);
         assertEq(v2.trackedBalance(), address(v2).balance);
     }
 
@@ -243,10 +243,10 @@ contract TaxSplitTest is Base {
         amount = bound(amount, 0, type(uint128).max);
         (uint256 p, uint256 b, uint256 tr) = v.splitTax(amount);
         assertEq(p + b + tr, amount, "conservation");
-        assertEq(p, (amount * 7000) / 10000);
-        assertEq(b, (amount * 2000) / 10000);
-        assertLe(tr, amount / 10 + 2);
-        assertGe(tr, amount / 10);
+        assertEq(p, (amount * 700) / 10000);
+        assertEq(b, (amount * 300) / 10000);
+        assertLe(tr, (amount * 9000) / 10000 + 2);
+        assertGe(tr, (amount * 9000) / 10000);
     }
 
     function testFuzz_TaxIntakeConservation(uint96 a, uint96 b) public {

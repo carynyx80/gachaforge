@@ -11,6 +11,26 @@ export const TOTAL_SUPPLY_DEFAULT = 1_000_000_000n * 10n ** 18n;
 /** 0.01% of supply, expressed in basis points. */
 export const ELIGIBILITY_BPS = 1n;
 
+/** Every machine token's trading tax is fixed: 2% buy / 2% sell (keep in sync with contracts). */
+export const TAX_BPS = 200;
+/** How the vault splits the tax it receives (flap.sh keeps its cut before the vault). Shares sum to 10_000. */
+export const TREASURY_SHARE_BPS = 9_000;
+export const POT_SHARE_BPS = 700;
+export const BUYBACK_SHARE_BPS = 300; // $FORGE buyback & burn
+
+export interface TaxSplit {
+  pot: number;
+  buyback: number;
+  treasury: number;
+}
+
+/** Splits a tax amount (any unit) into pot / $FORGE buyback / treasury; treasury absorbs rounding. */
+export function splitTax(amount: number): TaxSplit {
+  const pot = (amount * POT_SHARE_BPS) / 10_000;
+  const buyback = (amount * BUYBACK_SHARE_BPS) / 10_000;
+  return { pot, buyback, treasury: amount - pot - buyback };
+}
+
 /** Renaiss sell-back rate by age of the pull. */
 export function sellBackRate(ageSeconds: number): number {
   if (ageSeconds <= 3600) return 0.9;

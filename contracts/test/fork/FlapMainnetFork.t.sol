@@ -113,7 +113,7 @@ contract FlapMainnetForkTest is Test {
         p.meta = "bafkreigachaforgeforktest";
         p.packId = GachaTypes.PackId.FORGE_28;
         p.strategy = GachaTypes.Strategy.RAFFLE;
-        p.taxBps = 500;
+        p.taxBps = 200;
         p.salt = salt;
 
         vm.prank(creator);
@@ -133,12 +133,12 @@ contract FlapMainnetForkTest is Test {
         IFlapPortalTypes.TokenStateV8Safe memory st = IFlapPortal(PORTAL).getTokenV8Safe(token);
         assertEq(st.status, 1, "on bonding curve");
         assertEq(st.tokenVersion, 6, "TOKEN_TAXED_V3");
-        assertEq(st.buyTaxRate, 500);
-        assertEq(st.sellTaxRate, 500);
+        assertEq(st.buyTaxRate, 200, "2% buy");
+        assertEq(st.sellTaxRate, 200, "2% sell");
         assertEq(st.quoteTokenAddress, address(0), "BNB quote");
         IFlapTaxTokenV3View t = IFlapTaxTokenV3View(token);
-        assertEq(t.buyTaxRate(), 500);
-        assertEq(t.sellTaxRate(), 500);
+        assertEq(t.buyTaxRate(), 200);
+        assertEq(t.sellTaxRate(), 200);
         assertEq(t.totalSupply(), 1_000_000_000e18, "1B supply");
         ITaxProcessorView tp = ITaxProcessorView(t.taxProcessor());
         assertEq(tp.marketAddress(), vault, "vault is tax beneficiary");
@@ -170,19 +170,26 @@ contract FlapMainnetForkTest is Test {
         console2.log("vault BNB from sell tax:", sellTax);
         assertGt(sellTax, 0, "sell taxed -> vault");
 
-        // share of nominal 5% tax that reached the vault (buy leg)
-        console2.log("buy-leg vault share of nominal tax (bps):", (vaultAfterBuy * 10_000) / (buyIn * 500 / 10_000));
+        // share of nominal 2% tax that reached the vault (buy leg)
+        console2.log("buy-leg vault share of nominal tax (bps):", (vaultAfterBuy * 10_000) / (buyIn * 200 / 10_000));
 
-        // ---- sync splits 70/20/10
+        // ---- sync splits 7% pot / 3% $FORGE buyback / 90% treasury (company wallet)
+        assertEq(v.POT_BPS(), 700);
+        assertEq(v.BUYBACK_BPS(), 300);
+        assertEq(v.TREASURY_BPS(), 9_000);
+        assertEq(v.treasury(), COMPANY);
         uint256 treasuryBefore = COMPANY.balance;
         uint256 burnerBefore = address(d.burner).balance;
         v.sync();
         uint256 total = vaultAfterSell;
-        assertEq(v.pot(), (total * 7000) / 10_000, "70% pot");
-        assertEq(address(d.burner).balance - burnerBefore, (total * 2000) / 10_000, "20% burner");
-        assertEq(COMPANY.balance - treasuryBefore, total - (total * 7000) / 10_000 - (total * 2000) / 10_000, "10%");
+        uint256 toPot = (total * 700) / 10_000;
+        uint256 toBurner = (total * 300) / 10_000;
+        assertEq(v.pot(), toPot, "7% pot");
+        assertEq(address(d.burner).balance - burnerBefore, toBurner, "3% burner");
+        assertEq(COMPANY.balance - treasuryBefore, total - toPot - toBurner, "90% treasury");
+        assertGe(COMPANY.balance - treasuryBefore, (total * 9_000) / 10_000, "treasury >= 90%");
         assertEq(address(vault).balance, v.pot(), "only pot left");
-        assertEq(d.burner.totalBnbReceived(), (total * 2000) / 10_000);
+        assertEq(d.burner.totalBnbReceived(), toBurner);
         console2.log("pot after sync:", v.pot());
 
         // burner holds BNB while $FORGE is unset; buyback reverts cleanly
@@ -203,7 +210,7 @@ contract FlapMainnetForkTest is Test {
         p.meta = "bafkreigachaforgevpprobe";
         p.packId = GachaTypes.PackId.FORGE_28;
         p.strategy = GachaTypes.Strategy.RAFFLE;
-        p.taxBps = 500;
+        p.taxBps = 200;
         p.salt = _mineSalt();
         vm.prank(creator);
         try d2.factory.launch(p) returns (address token, address vault) {

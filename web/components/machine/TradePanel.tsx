@@ -4,6 +4,7 @@ import { erc20Abi, formatUnits, isAddress, maxUint256, parseUnits, type Address 
 import { useBalance, useReadContract, useWriteContract } from 'wagmi';
 import { bsc } from 'wagmi/chains';
 import type { Machine } from '@/lib/types';
+import { SPLIT } from '@/lib/economics';
 import { CONTRACTS_LIVE, FLAP_PORTAL, NATIVE, SLIPPAGE_BPS } from '@/lib/chain';
 import { flapPortalAbi } from '@/lib/abi/flapPortal';
 import { ActionButton } from '../wallet/ActionButton';
@@ -109,8 +110,10 @@ export function TradePanel({ m }: { m: Machine }) {
             <div className="flex justify-between"><span>Min. after 2% slippage</span><span className="font-mono">{fmt(minOut)}</span></div>
           </>
         )}
-        <div className="flex justify-between"><span>Trading tax</span><span className="font-mono text-fg">{m.taxBps / 100}%</span></div>
-        <div className="flex justify-between"><span>70% of tax →</span><span className="text-glow">gacha pot</span></div>
+        <div className="flex justify-between"><span>Trading tax</span><span className="font-mono text-fg">{m.taxBps / 100}% buy / {m.taxBps / 100}% sell · locked</span></div>
+        <div className="flex justify-between"><span>{SPLIT.platform}% of tax →</span><span>GachaForge platform</span></div>
+        <div className="flex justify-between"><span>{SPLIT.pot}% of tax →</span><span className="text-glow">gacha pot</span></div>
+        <div className="flex justify-between"><span>{SPLIT.buyback}% of tax →</span><span>$FORGE buyback & burn</span></div>
       </div>
       <ActionButton className="mt-4" onClick={submit} busy={tx.busy}
         disabledLabel={live ? undefined : 'Trading opens at mainnet launch'}

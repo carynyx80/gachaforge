@@ -207,6 +207,19 @@ export const buybackBurnerAbi = [
   },
   {
     "type": "function",
+    "name": "setForge",
+    "inputs": [
+      {
+        "name": "forge_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setRouter",
     "inputs": [
       {
@@ -304,6 +317,19 @@ export const buybackBurnerAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ForgeSet",
+    "inputs": [
+      {
+        "name": "forge",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -435,6 +461,16 @@ export const buybackBurnerAbi = [
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "ForgeAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ForgeUnset",
+    "inputs": []
   },
   {
     "type": "error",

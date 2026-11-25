@@ -371,6 +371,25 @@ export const machineVaultAbi = [
   },
   {
     "type": "function",
+    "name": "noEligibleHolder",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "openPull",
     "inputs": [
       {
@@ -538,6 +557,29 @@ export const machineVaultAbi = [
         "name": "proof",
         "type": "bytes32[]",
         "internalType": "bytes32[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "recordNoEligible",
+    "inputs": [
+      {
+        "name": "pullId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "snapshotBlock",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "snapshotHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -1015,6 +1057,31 @@ export const machineVaultAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NoEligibleRecorded",
+    "inputs": [
+      {
+        "name": "pullId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "snapshotBlock",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "snapshotHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
       }
     ],
     "anonymous": false

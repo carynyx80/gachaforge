@@ -10,7 +10,7 @@ interface IFlapLauncher {
         string name;
         string symbol;
         string meta; // metadata URI / IPFS CID as required by flap.sh
-        uint16 taxBps; // buy & sell tax, 100..1000
+        uint16 taxBps; // buy & sell tax, always 200 (2%)
         address taxReceiver; // MachineVault (receives 100% of tax in BNB)
         address creator; // receives any initial-buy tokens
         bytes32 salt; // optional vanity / uniqueness salt, adapter-defined

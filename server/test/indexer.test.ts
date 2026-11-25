@@ -39,9 +39,9 @@ function stubChain(logs: ReturnType<typeof log>[]): ChainCtx {
 describe('Indexer', () => {
   it('indexes launch, transfers, tax, trades, graduation, settlement and re-route alerts', async () => {
     const logs = [
-      log(FACTORY, 'MachineLaunched', { token: TOKEN, vault: VAULT, creator: ALICE, packId: 1, strategy: 2, taxBps: 500, dividendBps: 0, burnBps: 0, lpBps: 0, index: 0n }, 10n, 0),
+      log(FACTORY, 'MachineLaunched', { token: TOKEN, vault: VAULT, creator: ALICE, packId: 1, strategy: 2, taxBps: 200, dividendBps: 0, burnBps: 0, lpBps: 0, index: 0n }, 10n, 0),
       log(TOKEN, 'Transfer', { from: '0x0000000000000000000000000000000000000000', to: ALICE, value: parseEther('2000000') }, 11n, 0),
-      log(VAULT, 'TaxReceived', { amount: parseEther('0.1'), toPot: parseEther('0.07'), toBuyback: parseEther('0.02'), toTreasury: parseEther('0.01') }, 12n, 0),
+      log(VAULT, 'TaxReceived', { amount: parseEther('1'), toPot: parseEther('0.07'), toBuyback: parseEther('0.03'), toTreasury: parseEther('0.9') }, 12n, 0),
       log(PORTAL, 'TokenBought', { ts: 1n, token: TOKEN, buyer: ALICE, amount: parseEther('1000'), eth: parseEther('1'), fee: 0n, postPrice: 10n ** 9n }, 12n, 1),
       log(PORTAL, 'FlapTokenProgressChanged', { token: TOKEN, newProgress: parseEther('0.5') }, 13n, 0),
       log(PORTAL, 'LaunchedToDEX', { token: TOKEN, pool: '0x00000000000000000000000000000000000000cc', amount: 1n, eth: 1n }, 14n, 0),
@@ -65,10 +65,10 @@ describe('Indexer', () => {
     idx.stop();
 
     const m = (await repo.getMachine(TOKEN))!;
-    expect(m).toMatchObject({ ticker: 'TEST', pack: 'FORGE_48', strategy: 'DIVIDEND', taxBps: 500, stage: 'GRADUATED', bondingCurvePct: 100, packsOpened: 1, holders: 1, eligibleHolders: 1, burnedTokens: 5000 });
+    expect(m).toMatchObject({ ticker: 'TEST', pack: 'FORGE_48', strategy: 'DIVIDEND', taxBps: 200, stage: 'GRADUATED', bondingCurvePct: 100, packsOpened: 1, holders: 1, eligibleHolders: 1, burnedTokens: 5000 });
     expect(m.potUsd).toBeCloseTo(42 - 30 + 3, 5); // tax 0.07 → pot, pull spends 0.05, refund 0.005
     expect(m.paidToHoldersBnb).toBeCloseTo(0.06, 6);
-    expect((await repo.listTrades(TOKEN, 0, 10)).items[0]).toMatchObject({ side: 'BUY', amountBnb: 1, taxUsd: 30 });
+    expect((await repo.listTrades(TOKEN, 0, 10)).items[0]).toMatchObject({ side: 'BUY', amountBnb: 1, taxUsd: 12 });
     expect((await repo.listTrades('0x0000000000000000000000000000000000000bad', 0, 10)).total).toBe(0);
     expect((await repo.getPull(`${TOKEN}-1`))!).toMatchObject({ result: 'SOLD', proceedsBnb: 0.06, card: { valueUsd: 40 } });
     const burns = await repo.listBurns(0, 10);

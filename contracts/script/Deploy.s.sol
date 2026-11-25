@@ -19,6 +19,7 @@ import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol
 ///   forge script script/Deploy.s.sol --rpc-url $BSC_RPC_URL --broadcast --verify --ledger --sender <addr>
 /// See docs/DEPLOY-MAINNET.md. Never put a private key in .env.
 ///
+/// Economics: fixed 2% buy / 2% sell tax; vault splits 90% TREASURY / 7% pot / 3% BuybackBurner.
 /// FORGE_TOKEN may be empty / zero: BuybackBurner then accumulates BNB until the timelock
 /// calls BuybackBurner.setForge(token) (one-shot).
 contract Deploy is Script {

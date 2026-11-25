@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IFlapLauncher} from "../interfaces/IFlapLauncher.sol";
 import {IGachaForgeFactory} from "../interfaces/IGachaForgeFactory.sol";
+import {GachaTypes} from "../libraries/GachaTypes.sol";
 import {IFlapPortal, IFlapVaultPortal, IFlapPortalTypes, IFlapTaxTokenV3, IFlapTaxProcessor} from "./flap/IFlapPortal.sol";
 
 /// @title FlapLauncher
@@ -12,7 +13,7 @@ import {IFlapPortal, IFlapVaultPortal, IFlapPortalTypes, IFlapTaxTokenV3, IFlapT
 ///   - VaultPortal (preferred): VaultPortal.newTokenV6WithVault with this adapter as the vault
 ///     factory; VaultPortal calls newVault(), which makes GachaForgeFactory deploy the vault.
 ///   - Portal (fallback): Portal.newTokenV6 with beneficiary = predicted vault address.
-///   Both: buyTax == sellTax == taxBps, mktBps = 10000 (100% to the vault), quote = native BNB,
+///   Both: buyTax == sellTax == 200 (fixed 2%), mktBps = 10000 (100% to the vault), quote = native BNB,
 ///   commission receiver = 0, Tax Token V3, PancakeSwap V2 migrator. The salt must be pre-mined
 ///   off-chain so the Portal CREATE2 clone address ends in 0x7777.
 contract FlapLauncher is IFlapLauncher {
@@ -38,6 +39,7 @@ contract FlapLauncher is IFlapLauncher {
     error VaultMismatch();
     error UnsupportedQuote();
     error TransferFailed();
+    error InvalidTax();
 
     constructor(
         address portal_,
@@ -72,6 +74,7 @@ contract FlapLauncher is IFlapLauncher {
 
     function createToken(TokenParams calldata p) external payable override returns (address token) {
         if (msg.sender != address(factory)) revert NotFactory();
+        if (p.taxBps != GachaTypes.TAX_BPS) revert InvalidTax();
         address predicted = predictToken(p.salt);
         if (uint160(predicted) & 0xFFFF != 0x7777) revert BadVanity(predicted);
 
@@ -136,8 +139,8 @@ contract FlapLauncher is IFlapLauncher {
         q.beneficiary = p.taxReceiver;
         q.dexId = IFlapPortalTypes.DEXId.DEX0;
         q.lpFeeProfile = IFlapPortalTypes.V3LPFeeProfile.LP_FEE_PROFILE_STANDARD;
-        q.buyTaxRate = p.taxBps;
-        q.sellTaxRate = p.taxBps;
+        q.buyTaxRate = GachaTypes.TAX_BPS;
+        q.sellTaxRate = GachaTypes.TAX_BPS;
         q.taxDuration = taxDuration;
         q.antiFarmerDuration = antiFarmerDuration;
         q.mktBps = 10_000;
@@ -160,8 +163,8 @@ contract FlapLauncher is IFlapLauncher {
         q.quoteAmt = msg.value;
         q.dexId = IFlapPortalTypes.DEXId.DEX0;
         q.lpFeeProfile = IFlapPortalTypes.V3LPFeeProfile.LP_FEE_PROFILE_STANDARD;
-        q.buyTaxRate = p.taxBps;
-        q.sellTaxRate = p.taxBps;
+        q.buyTaxRate = GachaTypes.TAX_BPS;
+        q.sellTaxRate = GachaTypes.TAX_BPS;
         q.taxDuration = taxDuration;
         q.antiFarmerDuration = antiFarmerDuration;
         q.mktBps = 10_000;

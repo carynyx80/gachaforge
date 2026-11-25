@@ -44,7 +44,10 @@ contract FlapLauncherUnitTest is Test {
         l.setFactory(address(1));
 
         IFlapLauncher.TokenParams memory p;
-        p.taxBps = 500;
+        p.taxBps = 500; // only the fixed 2% is accepted
+        vm.expectRevert(FlapLauncher.InvalidTax.selector);
+        l.createToken(p);
+        p.taxBps = 200;
         // find a salt whose predicted address does NOT end in 7777 (almost any)
         p.salt = bytes32(uint256(1));
         address pred = l.predictToken(p.salt);
