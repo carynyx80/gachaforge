@@ -7,6 +7,8 @@ import { MachineArt } from '../MachineArt';
 import { CardThumb } from '../CardThumb';
 import { GachaMachine } from '../GachaMachine';
 import { WinnerCell } from '../RecentPulls';
+import { TradePanel } from './TradePanel';
+import { RewardsPanel } from './RewardsPanel';
 
 const BSC = 'https://bscscan.com';
 
@@ -55,34 +57,6 @@ function CopyAddr({ label, value }: { label: string; value: string }) {
       className="inline-flex items-center gap-2 rounded-md border border-line bg-bg px-2.5 py-1 font-mono text-xs text-muted transition hover:border-accent hover:text-fg">
       <span className="text-muted/70">{label}</span>{short(value)}<span className="text-accent">{ok ? '✓' : '⧉'}</span>
     </button>
-  );
-}
-
-function TradePanel({ m }: { m: Machine }) {
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
-  const [amt, setAmt] = useState('0.1');
-  return (
-    <div className="panel p-4">
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-bg p-1">
-        {(['BUY', 'SELL'] as const).map((s) => (
-          <button key={s} onClick={() => setSide(s)} className={`rounded-md py-2 font-display font-bold tracking-wider ${side === s ? (s === 'BUY' ? 'bg-success text-black' : 'bg-danger text-black') : 'text-muted'}`}>{s}</button>
-        ))}
-      </div>
-      <label className="mt-4 block text-xs text-muted">Amount ({side === 'BUY' ? 'BNB' : `$${m.ticker}`})</label>
-      <div className="mt-1 flex items-center rounded-md border border-line bg-bg px-3 focus-within:border-accent">
-        <input value={amt} onChange={(e) => setAmt(e.target.value)} inputMode="decimal" className="w-full bg-transparent py-2.5 font-mono outline-none" />
-        <span className="text-xs text-muted">{side === 'BUY' ? 'BNB' : m.ticker}</span>
-      </div>
-      <div className="mt-2 flex gap-1">{(side === 'BUY' ? ['0.05', '0.1', '0.5', '1'] : ['25%', '50%', '75%', 'Max']).map((q) => (
-        <button key={q} onClick={() => setAmt(q)} className="flex-1 rounded border border-line py-1 font-mono text-xs text-muted hover:border-accent hover:text-fg">{q}</button>
-      ))}</div>
-      <div className="mt-3 space-y-1 text-xs text-muted">
-        <div className="flex justify-between"><span>Trading tax</span><span className="font-mono text-fg">{m.taxBps / 100}%</span></div>
-        <div className="flex justify-between"><span>70% of tax →</span><span className="text-glow">gacha pot</span></div>
-      </div>
-      <button disabled className="btn-chunky mt-4 w-full py-3 opacity-60">Connect wallet</button>
-      <p className="mt-2 text-center text-[10px] text-muted">Trades route through flap.sh {m.stage === 'CURVE' ? 'bonding curve' : 'pool'}.</p>
-    </div>
   );
 }
 
@@ -198,11 +172,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
 
           <TradePanel m={m} />
 
-          <div className="panel p-4">
-            <h3 className="font-display text-lg font-bold uppercase tracking-wide">Your rewards</h3>
-            <p className="mt-1 text-sm text-muted">Connect a wallet to see your eligibility, odds and claimable BNB. Hold ≥ 100,000 ${m.ticker} (0.01% of supply) at snapshot to qualify.</p>
-            <button disabled className="btn-ghost mt-3 w-full py-2.5 opacity-70">Connect wallet</button>
-          </div>
+          <RewardsPanel m={m} />
 
           <div className="panel p-4">
             {m.strategy === 'RAFFLE' || m.strategy === 'HIT_HUNTER' ? (

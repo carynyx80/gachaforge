@@ -4,11 +4,22 @@ import type { PackId, Strategy } from '@/lib/types';
 import { PACK_PRICE } from '@/lib/types';
 import { STRATEGY_INFO } from '@/lib/strategies';
 import { usd } from '@/lib/format';
+import { parseEther, parseEventLogs, type Hex } from 'viem';
+import { useWriteContract } from 'wagmi';
+import { bsc } from 'wagmi/chains';
+import { CONTRACTS_LIVE, FACTORY_ADDRESS } from '@/lib/chain';
+import { gachaForgeFactoryAbi } from '@/lib/abi/gachaForgeFactory';
+import { mineVanitySalt } from '@/lib/vanity';
+import { ActionButton } from '../wallet/ActionButton';
+import { TxStatus, useTx } from '../wallet/tx';
 
 const PACKS: { id: PackId; max: string }[] = [
   { id: 'FORGE_28', max: '~10x' }, { id: 'FORGE_48', max: '~11x' }, { id: 'FORGE_88', max: '~9.9x' },
 ];
 const STRATS: Strategy[] = ['RAFFLE', 'HIT_HUNTER', 'DIVIDEND', 'BURN', 'SPLIT'];
+// Enum indices match contracts/src/libraries/GachaTypes.sol
+const PACK_INDEX: Record<PackId, number> = { FORGE_28: 0, FORGE_48: 1, FORGE_88: 2 };
+const STRATEGY_INDEX: Record<Strategy, number> = { RAFFLE: 0, HIT_HUNTER: 1, DIVIDEND: 2, BURN: 3, SPLIT: 4 };
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
@@ -46,8 +57,39 @@ export function LaunchForm() {
   };
 
   const buyBnb = Number(buy) || 0;
-  const launchFee = 0.005;
   const t = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+
+  const { writeContractAsync } = useWriteContract();
+  const tx = useTx();
+  const [mining, setMining] = useState<number | null>(null);
+  const [launched, setLaunched] = useState<string | null>(null);
+  const valid = name.trim().length > 0 && t.length > 0 && Number.isFinite(buyBnb) && buyBnb >= 0;
+
+  const launch = async () => {
+    const factory = FACTORY_ADDRESS;
+    if (!factory || !valid) return;
+    setLaunched(null);
+    setMining(0);
+    let salt: Hex;
+    try {
+      ({ salt } = await mineVanitySalt((n) => setMining(n)));
+    } finally {
+      setMining(null);
+    }
+    const sp = strategy === 'SPLIT'
+      ? { dividendBps: split.dividend * 100, burnBps: split.burn * 100, lpBps: split.lp * 100 }
+      : { dividendBps: 0, burnBps: 0, lpBps: 0 };
+    const receipt = await tx.run(() => writeContractAsync({
+      address: factory, abi: gachaForgeFactoryAbi, functionName: 'launch', chainId: bsc.id,
+      // TODO(meta): upload image + metadata via flap (funcs.flap.sh/api/upload) and pass the CID here.
+      args: [{ name: name.trim(), symbol: t, meta: '', packId: PACK_INDEX[pack], strategy: STRATEGY_INDEX[strategy], taxBps: tax * 100, split: sp, salt, extraData: '0x' }],
+      value: parseEther(String(buyBnb)),
+    }), `Launch $${t}`);
+    if (receipt) {
+      const ev = parseEventLogs({ abi: gachaForgeFactoryAbi, logs: receipt.logs, eventName: 'MachineLaunched' })[0];
+      if (ev) setLaunched(ev.args.token);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-10">
@@ -150,11 +192,17 @@ export function LaunchForm() {
               {strategy === 'SPLIT' && <div className="text-xs text-muted">{split.dividend}/{split.burn}/{split.lp} dividend/burn/LP</div>}
               <div className="rounded-md border border-accent/30 bg-accent-soft/50 p-2.5 text-xs"><div className="flex justify-between"><span className="text-muted">Gacha pot</span><span className="font-mono text-accent">{usd(PACK_PRICE[pack])} to rip</span></div></div>
               <div className="space-y-1 border-t border-line pt-3 text-sm">
-                <div className="flex justify-between"><span className="text-muted">flap.sh launch fee (est.)</span><span className="font-mono">{launchFee} BNB</span></div>
+                <div className="flex justify-between"><span className="text-muted">flap.sh launch fee</span><span className="font-mono">0 BNB + gas</span></div>
                 <div className="flex justify-between"><span className="text-muted">Initial buy</span><span className="font-mono">{buyBnb} BNB</span></div>
-                <div className="flex justify-between font-semibold"><span>Total</span><span className="font-mono">{(launchFee + buyBnb).toFixed(4)} BNB</span></div>
+                <div className="flex justify-between font-semibold"><span>Total</span><span className="font-mono">{buyBnb.toFixed(4)} BNB</span></div>
               </div>
-              <button disabled className="btn-chunky w-full py-3 opacity-60">Connect wallet</button>
+              <ActionButton onClick={launch} busy={tx.busy || mining !== null}
+                disabledLabel={CONTRACTS_LIVE ? undefined : 'Launching opens soon'}
+                disabled={!valid}>
+                {mining !== null ? `Mining token address… ${Math.round(mining / 1000)}k` : tx.busy ? 'Launching…' : valid ? `Launch $${t}` : 'Enter name & ticker'}
+              </ActionButton>
+              <TxStatus state={tx.state} />
+              {launched && <a href={`/m/${launched}`} className="block text-center text-sm text-accent underline">Open your machine →</a>}
               <p className="text-center text-xs text-muted">Launched on <span className="text-fg">flap.sh</span> · BNB Chain</p>
             </div>
           </div>

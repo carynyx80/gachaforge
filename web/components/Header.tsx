@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useT } from './LangProvider';
 import { Wordmark } from './Logo';
+import { WalletButton } from './wallet/WalletButton';
 import type { DictKey } from '@/lib/i18n';
 
 const NAV: { href: string; k: DictKey }[] = [
@@ -38,7 +39,7 @@ export function Header() {
           <a href="https://x.com/" target="_blank" rel="noreferrer" aria-label="X" className="hidden h-8 w-8 place-items-center rounded-md border border-line text-muted transition hover:text-fg sm:grid">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.8 3h3.1l-6.8 7.7L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.2-8.3L2 3h6.4l4.4 5.8L17.8 3Zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5Z" /></svg>
           </a>
-          <button className="btn-chunky px-4 py-2 text-sm" onClick={() => alert('Wallet connect coming soon')}>{t('connect')}</button>
+          <WalletButton label={t('connect')} />
           <button className="grid h-9 w-9 place-items-center rounded-md border border-line lg:hidden" aria-label="Menu" onClick={() => setOpen(!open)}>
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d={open ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} /></svg>
           </button>

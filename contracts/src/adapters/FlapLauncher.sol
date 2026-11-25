@@ -96,8 +96,9 @@ contract FlapLauncher is IFlapLauncher {
     }
 
     // ------------------------------------------------------------ VaultPortal vault-factory hooks
-    // UNVERIFIED: exact IVaultFactory signature / extra hooks (factorySpecVersion,
-    // _validateBeforeLaunch) must be matched to FlapVaultExample/src/flap/IVaultFactory.sol.
+    // newVault / isQuoteTokenSupported match FlapVaultExample/src/flap/IVaultFactory.sol and a
+    // VaultPortal launch succeeded on a mainnet fork. The optional onBeforeLaunch validation hook
+    // and the VaultFactoryBaseV2 spec (needed for Flap's low-risk badge) are not implemented.
 
     function newVault(address taxToken, address quoteToken, address, bytes calldata)
         external

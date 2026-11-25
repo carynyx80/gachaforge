@@ -3,8 +3,11 @@ pragma solidity ^0.8.24;
 
 /// @notice Trimmed flap.sh interfaces, transcribed from docs/flap-integration.md
 ///         (source: github.com/flap-sh/FlapVaultExample src/flap/IPortal.sol, IVaultPortal.sol).
-/// @dev Before mainnet, diff these against the official files; ABI decoding depends on exact
-///      struct field order. Items marked UNVERIFIED were not confirmed by the research.
+/// @dev VERIFIED 2026-11-25: field order diffed against the official FlapVaultExample sources
+///      (IPortal.sol, IVaultPortal.sol), selectors 8cb5772c / ef7ec2e7 / 62fafcca / 1b806220 found
+///      in the deployed Portal (v5.27.2) and VaultPortal implementations, and newTokenV6,
+///      newTokenV6WithVault, swapExactInput and getTokenV8Safe exercised on a BSC mainnet fork
+///      (test/fork/FlapMainnetFork.t.sol).
 interface IFlapPortalTypes {
     enum DexThreshType {
         TWO_THIRDS,
@@ -74,8 +77,7 @@ interface IFlapPortalTypes {
         TokenVersion tokenVersion;
     }
 
-    /// @dev UNVERIFIED field order: "NewTokenV6Params - beneficiary + {vaultFactory, vaultData}".
-    ///      Copy the exact struct from FlapVaultExample/src/flap/IVaultPortal.sol before mainnet.
+    /// @dev Matches FlapVaultExample/src/flap/IVaultPortal.sol exactly (verified + fork-tested).
     struct NewTokenV6WithVaultParams {
         string name;
         string symbol;

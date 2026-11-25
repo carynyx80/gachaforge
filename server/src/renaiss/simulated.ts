@@ -6,7 +6,7 @@ import type { BuyPackResult, CardProvider, ProviderCard, PullInfo } from './prov
 // Invented, generic names only — no real franchises or trademarks.
 const CREATURES = ['Ember Drake', 'Tidal Wisp', 'Volt Fox', 'Moss Golem', 'Frost Lynx', 'Shadow Moth', 'Crystal Ram', 'Storm Kite', 'Dune Serpent', 'Neon Koi', 'Iron Beetle', 'Solar Owl', 'Void Jackal', 'Bloom Sprite', 'Quartz Tortoise', 'Plasma Hound'];
 const VARIANTS = ['', 'Holo', 'Full Art', 'Alt Art', 'Secret Rare', 'Gold Foil', 'Shadowless', 'First Edition'];
-const SETS = ['Forge Origins', 'Neon Drift', 'Arcade Legends', 'Midnight Circuit', 'Pink Nova', 'Glitch Era'];
+const SETS = ['Forge Origins', 'Neon Drift', 'Arcade Legends', 'Midnight Circuit', 'Lime Nova', 'Glitch Era'];
 const GRADERS: Grader[] = ['PSA', 'CGC', 'BGS'];
 const GRADES: Record<Grader, string[]> = { PSA: ['8', '9', '10'], CGC: ['8.5', '9', '9.5', '10'], BGS: ['8.5', '9', '9.5', '10'] };
 

@@ -1,5 +1,5 @@
 import type {
-  ActivityEvent, BurnEvent, Machine, MachineQuery, Paged, Pull, RaffleProof, RewardsView, Stats, Trade,
+  ActivityEvent, BurnEvent, DividendClaim, Machine, MachineQuery, Paged, Pull, RaffleProof, RewardsView, Stats, Trade,
 } from './types';
 import { mockActivity, mockBurns, mockMachines, mockPulls, mockStats, mockTrades } from './mock';
 
@@ -70,6 +70,24 @@ export async function getMachineTrades(address: string, p = 1): Promise<Paged<Tr
 export async function getRewards(address: string, wallet: string): Promise<RewardsView> {
   if (USE_MOCK) return { address: wallet, eligible: true, balance: 250_000, minBalance: 100_000, oddsPct: 0.42, claimableBnb: 0.0132, totalEarnedBnb: 0.08 };
   return get(`/machines/${address}/rewards/${wallet}`);
+}
+
+export async function getClaims(address: string, wallet: string): Promise<Paged<DividendClaim>> {
+  if (USE_MOCK) return { items: [], total: 0 };
+  return get(`/machines/${address}/claims/${wallet}`);
+}
+
+/** Backend mode: 'live' only when it indexes real contracts. Any failure → treat as mock/preview. */
+export async function getHealthMode(): Promise<'mock' | 'live'> {
+  if (USE_MOCK) return 'mock';
+  try {
+    const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' });
+    if (!res.ok) return 'mock';
+    const j = (await res.json()) as { mode?: string };
+    return j.mode === 'live' ? 'live' : 'mock';
+  } catch {
+    return 'mock';
+  }
 }
 
 export async function getRecentPulls(limit = 20): Promise<Pull[]> {

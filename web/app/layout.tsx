@@ -4,6 +4,8 @@ import './globals.css';
 import { LangProvider } from '@/components/LangProvider';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { PreviewBanner } from '@/components/PreviewBanner';
+import { Web3Providers } from '@/components/wallet/Providers';
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
 const chakra = Chakra_Petch({ variable: '--font-chakra', subsets: ['latin'], weight: ['500', '600', '700'] });
@@ -18,11 +20,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${chakra.variable} ${mono.variable}`}>
       <body className="flex min-h-screen flex-col">
-        <LangProvider>
+        <Web3Providers>
+          <LangProvider>
           <Header />
+          <PreviewBanner />
           <main className="flex-1">{children}</main>
           <Footer />
-        </LangProvider>
+          </LangProvider>
+        </Web3Providers>
       </body>
     </html>
   );

@@ -115,3 +115,6 @@ export interface MachineQuery {
 }
 
 export const PACK_PRICE: Record<PackId, number> = { FORGE_28: 28, FORGE_48: 48, FORGE_88: 88 };
+
+/** Unclaimed dividend round with merkle proof (GET /api/machines/:address/claims/:wallet). */
+export interface DividendClaim { machine: string; epoch: number; root: string; wallet: string; amountWei: string; proof: string[]; pushed: boolean }
