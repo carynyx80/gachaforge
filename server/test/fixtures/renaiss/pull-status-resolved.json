@@ -1,0 +1,85 @@
+{
+  "_source": "synthesized from openapi.json v2 schema (GET /v2/gacha/pull/status 200; draw name/tier/value from public pull-history, attributes/image from public collectible) with real pandora-28 mainnet values; no real draw/offer payload is public",
+  "requestId": "0c6f3a52-7d1e-4b8a-9f21-3e5d7c9a1b24",
+  "buyerWalletAddress": "0x1111111111111111111111111111111111111111",
+  "packId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+  "nonce": "1764081234567",
+  "numOfTokens": 1,
+  "status": "RESOLVED",
+  "permitFundTxHash": "0x4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+  "error": null,
+  "result": {
+    "permitFundTxHash": "0x4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f",
+    "buyerWalletAddress": "0x1111111111111111111111111111111111111111",
+    "packId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+    "packName": "PANDORA 28",
+    "status": "RESOLVED",
+    "numOfTokens": 1,
+    "pulledAt": "2026-11-25T18:00:00.000Z",
+    "draws": [
+      {
+        "settlementId": "0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+        "tokenId": "73721661518761489417662024120673404533370918401961634301179502961262112660096",
+        "releaseTxHash": null,
+        "buybackTxHash": null,
+        "buybackTiers": [
+          {
+            "buybackPercentage": 90,
+            "amountInUsdt": "18450000000000000000",
+            "expiresAt": "2026-11-25T19:00:00.000Z"
+          },
+          {
+            "buybackPercentage": 85,
+            "amountInUsdt": "17425000000000000000",
+            "expiresAt": "2026-11-26T18:00:00.000Z"
+          },
+          {
+            "buybackPercentage": 50,
+            "amountInUsdt": "10250000000000000000",
+            "expiresAt": "2026-11-28T18:00:00.000Z"
+          }
+        ],
+        "tier": "C",
+        "buybackBaseValueInUSD": "2050",
+        "buybackBonus": null,
+        "type": "POKEMON",
+        "name": "#097 Katy",
+        "frontImageUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/graded-cards-renders/PSA77565797/nft_image.jpg",
+        "attributes": [
+          {
+            "key": "Grader",
+            "value": "PSA"
+          },
+          {
+            "key": "Grade",
+            "value": "9 Mint"
+          },
+          {
+            "key": "Cert Number",
+            "value": "PSA77565797"
+          },
+          {
+            "key": "Year",
+            "value": "2023"
+          },
+          {
+            "key": "Set",
+            "value": "Pokemon Japanese Sv1v-Violet Ex"
+          },
+          {
+            "key": "Card Number",
+            "value": "097"
+          },
+          {
+            "key": "Character",
+            "value": "Katy"
+          },
+          {
+            "key": "Language",
+            "value": "Japanese"
+          }
+        ]
+      }
+    ]
+  }
+}

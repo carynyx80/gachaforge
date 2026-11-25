@@ -1,0 +1,14 @@
+{
+  "_source": "synthesized from openapi.json v2 schema (GET /v2/gacha/buyback/status 200) with real pandora-28 mainnet values; no real draw/offer payload is public",
+  "requestId": "9a7b5c3d-1e2f-4a6b-8c0d-2e4f6a8b0c1d",
+  "buyerWalletAddress": "0x1111111111111111111111111111111111111111",
+  "cardPackId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+  "settlementIds": [
+    "0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e"
+  ],
+  "status": "COMPLETED",
+  "txHash": "0xabababababababababababababababababababababababababababababababab",
+  "totalAmountInUsdt": "18450000000000000000",
+  "itemCount": 1,
+  "error": null
+}

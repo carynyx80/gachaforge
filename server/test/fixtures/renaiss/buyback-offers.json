@@ -1,0 +1,41 @@
+{
+  "_source": "synthesized from openapi.json v2 schema (GET /v2/gacha/buyback/offers 200) with real pandora-28 mainnet values; no real draw/offer payload is public",
+  "offers": [
+    {
+      "cardPackId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+      "settlementId": "0x7777777777777777777777777777777777777777777777777777777777777777",
+      "tokenId": "123",
+      "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f",
+      "buybackTiers": [
+        {
+          "buybackPercentage": 50,
+          "amountInUsdt": "9000000000000000000",
+          "expiresAt": "2026-11-27T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "cardPackId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+      "settlementId": "0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "tokenId": "73721661518761489417662024120673404533370918401961634301179502961262112660096",
+      "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f",
+      "buybackTiers": [
+        {
+          "buybackPercentage": 90,
+          "amountInUsdt": "18450000000000000000",
+          "expiresAt": "2026-11-25T19:00:00.000Z"
+        },
+        {
+          "buybackPercentage": 85,
+          "amountInUsdt": "17425000000000000000",
+          "expiresAt": "2026-11-26T18:00:00.000Z"
+        },
+        {
+          "buybackPercentage": 50,
+          "amountInUsdt": "10250000000000000000",
+          "expiresAt": "2026-11-28T18:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}

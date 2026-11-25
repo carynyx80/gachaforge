@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { PACK_MAX_MULTIPLIER, PACK_PRICE_USD, sellBackRate } from '../core/packs.js';
 import type { Grader, PackId } from '../types.js';
-import type { BuyPackResult, CardProvider, ProviderCard, PullInfo } from './provider.js';
+import { ONE_USDT } from './networks.js';
+import type { BuyPackResult, CardProvider, PackCost, ProviderCard, ReleaseStatus, SellBackQuote, SellBackResult } from './types.js';
 
 // Invented, generic names only — no real franchises or trademarks.
 const CREATURES = ['Ember Drake', 'Tidal Wisp', 'Volt Fox', 'Moss Golem', 'Frost Lynx', 'Shadow Moth', 'Crystal Ram', 'Storm Kite', 'Dune Serpent', 'Neon Koi', 'Iron Beetle', 'Solar Owl', 'Void Jackal', 'Bloom Sprite', 'Quartz Tortoise', 'Plasma Hound'];
@@ -37,9 +38,12 @@ export function randomCard(pack: PackId, rng: Rng = Math.random): ProviderCard {
   const grader = pick(rng, GRADERS);
   const variant = pick(rng, VARIANTS);
   const name = [pick(rng, CREATURES), variant].filter(Boolean).join(' ');
-  const id = `sim-${Math.floor(rng() * 1e12).toString(36)}`;
+  const n = Math.floor(rng() * 1e12);
+  const id = `sim-${n.toString(36)}`;
+  const tokenId = String(n);
   return {
-    id,
+    tokenId,
+    settlementId: id,
     name,
     set: pick(rng, SETS),
     grader,
@@ -51,42 +55,68 @@ export function randomCard(pack: PackId, rng: Rng = Math.random): ProviderCard {
 
 export class SimulatedProvider implements CardProvider {
   readonly name = 'simulated';
-  private pulls = new Map<string, PullInfo & { card: ProviderCard }>();
-  private byCard = new Map<string, string>();
+  private pulls = new Map<string, { id: string; card: ProviderCard; purchasedAt: number; sold: boolean; owner: string }>();
+  private bySettlement = new Map<string, string>();
+  private byToken = new Map<string, string>();
 
   constructor(
     private rng: Rng = Math.random,
     private clock: () => number = () => Math.floor(Date.now() / 1000),
+    /** Address that "receives" released cards (the operator wallet in prod). */
+    private operator = '0x000000000000000000000000000000000000dEaD',
+    private releaseAfterSeconds = 259_200,
   ) {}
 
-  async buyPack(packId: PackId, _paymentTx: string): Promise<BuyPackResult> {
-    const card = randomCard(packId, this.rng);
-    const id = randomUUID();
+  async packCost(packId: PackId): Promise<PackCost> {
+    return { usdt: BigInt(PACK_PRICE_USD[packId]) * ONE_USDT, usd: PACK_PRICE_USD[packId] };
+  }
+
+  async buyPack(packId: PackId, opts: { onSubmitted?: (requestId: string) => void | Promise<void> } = {}): Promise<BuyPackResult> {
     const purchasedAt = this.clock();
-    this.pulls.set(id, { id, status: 'REVEALED', card, purchasedAt });
-    this.byCard.set(card.id, id);
-    return { pullId: id, card, purchasedAt };
+    const card = { ...randomCard(packId, this.rng), releaseAt: purchasedAt + this.releaseAfterSeconds };
+    const id = randomUUID();
+    await opts.onSubmitted?.(id);
+    this.pulls.set(id, { id, card, purchasedAt, sold: false, owner: 'inventory' });
+    this.bySettlement.set(card.settlementId, id);
+    this.byToken.set(card.tokenId, id);
+    return { pullId: id, cards: [card], totalValueUsd: card.valueUsd, paidUsdt: (await this.packCost(packId)).usdt, purchasedAt };
   }
-  async getPull(id: string) {
-    const p = this.pulls.get(id);
-    if (!p) throw new Error(`unknown pull ${id}`);
-    return { ...p };
+
+  private pullFor(c: Pick<ProviderCard, 'settlementId'>) {
+    const p = this.pulls.get(this.bySettlement.get(c.settlementId) ?? '');
+    if (!p) throw new Error(`unknown card ${c.settlementId}`);
+    return p;
   }
-  async quoteSellBack(cardId: string) {
-    const p = this.pulls.get(this.byCard.get(cardId) ?? '');
-    if (!p) throw new Error(`unknown card ${cardId}`);
-    const rate = sellBackRate(this.clock() - p.purchasedAt);
-    return { cardId, valueUsd: p.card.valueUsd, rate, proceedsUsd: Math.round(p.card.valueUsd * rate * 100) / 100 };
+
+  async quoteSellBack(cards: ProviderCard[]): Promise<SellBackQuote> {
+    const ps = cards.map((c) => this.pullFor(c));
+    const rate = sellBackRate(this.clock() - ps[0].purchasedAt);
+    const valueUsd = Math.round(ps.reduce((s, p) => s + p.card.valueUsd, 0) * 100) / 100;
+    const proceedsUsd = Math.round(valueUsd * rate * 100) / 100;
+    return { settlementIds: cards.map((c) => c.settlementId), valueUsd, rate, proceedsUsd, proceedsUsdt: BigInt(Math.round(proceedsUsd * 100)) * (ONE_USDT / 100n) };
   }
-  async sellBack(cardId: string) {
-    const q = await this.quoteSellBack(cardId);
-    const p = this.pulls.get(this.byCard.get(cardId)!)!;
-    if (p.status === 'SOLD') throw new Error(`card ${cardId} already sold`);
-    p.status = 'SOLD';
-    return { ...q, txRef: `sim-sell-${cardId}` };
+
+  async sellBack(cards: ProviderCard[]): Promise<SellBackResult> {
+    const q = await this.quoteSellBack(cards);
+    for (const c of cards) {
+      const p = this.pullFor(c);
+      if (p.sold) throw new Error(`card ${c.settlementId} already sold`);
+    }
+    for (const c of cards) this.pullFor(c).sold = true;
+    return { ...q, txRef: `sim-sell-${cards[0].settlementId}` };
   }
-  async transferCard(cardId: string, _to: string) {
-    const p = this.pulls.get(this.byCard.get(cardId) ?? '');
-    if (p) p.status = 'TRANSFERRED';
+
+  async releaseStatus(card: Pick<ProviderCard, 'tokenId' | 'releaseAt'>): Promise<ReleaseStatus> {
+    const p = this.pulls.get(this.byToken.get(card.tokenId) ?? '');
+    if (!p) return { released: false };
+    if (p.owner === 'inventory' && !p.sold && this.clock() >= (p.card.releaseAt ?? 0)) p.owner = this.operator;
+    return { released: p.owner === this.operator, owner: p.owner, releaseAt: p.card.releaseAt };
+  }
+
+  async transferCard(tokenId: string, to: string): Promise<string> {
+    const p = this.pulls.get(this.byToken.get(tokenId) ?? '');
+    if (!p || p.owner !== this.operator) throw new Error(`card ${tokenId} not released`);
+    p.owner = to;
+    return `0xsim-transfer-${tokenId}`;
   }
 }

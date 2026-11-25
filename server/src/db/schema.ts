@@ -1,5 +1,5 @@
 import { bigint, boolean, doublePrecision, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text } from 'drizzle-orm/pg-core';
-import type { ActivityEvent, BurnEvent, Machine, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardReleaseStatus, Machine, Pull, RaffleProof, Trade } from '../types.js';
 
 export const machines = pgTable('machines', {
   address: text('address').primaryKey(),
@@ -99,3 +99,24 @@ export const counters = pgTable('counters', {
   name: text('name').primaryKey(),
   value: doublePrecision('value').notNull().default(0),
 });
+
+export const cardReleases = pgTable(
+  'card_releases',
+  {
+    pullKey: text('pull_key').notNull(),
+    tokenId: text('token_id').notNull(),
+    machine: text('machine').notNull(),
+    ticker: text('ticker').notNull(),
+    winner: text('winner').notNull(),
+    cardName: text('card_name').notNull(),
+    releaseAt: bigint('release_at', { mode: 'number' }).notNull(),
+    status: text('status').$type<CardReleaseStatus>().notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: bigint('next_attempt_at', { mode: 'number' }).notNull(),
+    lastError: text('last_error'),
+    txHash: text('tx_hash'),
+    createdAt: bigint('created_at', { mode: 'number' }).notNull(),
+    updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.pullKey, t.tokenId] }), index('card_releases_due_idx').on(t.status, t.nextAttemptAt), index('card_releases_winner_idx').on(t.winner)],
+);

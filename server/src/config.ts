@@ -64,8 +64,23 @@ const schema = z.object({
         .filter(Boolean),
     )
     .pipe(z.array(address)),
-  RENAISS_API_URL: z.string().optional(),
+  /** Renaiss network; defaults from CHAIN_ID (56 → mainnet, 97 → testnet) and must agree with it. */
+  RENAISS_NETWORK: z.enum(['mainnet', 'testnet']).optional(),
+  /** Override the API base URL (defaults: https://api.renaiss.xyz / https://dev-api.renaiss.xyz). */
+  RENAISS_API_URL: z.string().url().optional(),
+  /** Builder key (header x-builder-api-key). Required only when the operator runs live (not mock). */
   RENAISS_API_KEY: z.string().optional(),
+  RENAISS_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  /** Max slippage on PancakeSwap quotes, in bps (100 = 1%). */
+  SWAP_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(2000).default(100),
+  /** Extra USDT bought on top of the pack price shortfall, in bps (dust stays in the wallet for the next pull). */
+  SWAP_USDT_BUFFER_BPS: z.coerce.number().int().min(0).max(1000).default(10),
+  SWAP_DEADLINE_SECONDS: z.coerce.number().int().positive().default(180),
+  /** Defaults per network (see src/renaiss/networks.ts). */
+  PANCAKE_ROUTER: address.optional(),
+  USDT_ADDRESS: address.optional(),
+  RENAISS_REGISTRY: address.optional(),
+  RELEASE_POLL_MS: z.coerce.number().int().positive().default(60_000),
   DATABASE_URL: z.string().optional(),
   MOCK_MODE: boolish.optional(),
   BNB_USD_PRICE: z.coerce.number().positive().default(600),
@@ -76,7 +91,7 @@ const schema = z.object({
   LOG_LEVEL: z.string().default('info'),
 });
 
-export type Config = Omit<z.infer<typeof schema>, 'MOCK_MODE'> & { MOCK_MODE: boolean; VERSION: string };
+export type Config = Omit<z.infer<typeof schema>, 'MOCK_MODE' | 'RENAISS_NETWORK'> & { MOCK_MODE: boolean; VERSION: string; RENAISS_NETWORK: 'mainnet' | 'testnet' };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   // Treat empty strings as unset so `.env.example` copied verbatim works.
@@ -95,7 +110,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     if (!c.FACTORY_ADDRESS) missing.push('FACTORY_ADDRESS (required when MOCK_MODE=false)');
     if (!c.RPC_URL) missing.push('RPC_URL (required when FACTORY_ADDRESS is set)');
     if (c.OPERATOR_ENABLED && !c.OPERATOR_PRIVATE_KEY) missing.push('OPERATOR_PRIVATE_KEY (required when OPERATOR_ENABLED=true)');
+    if (c.OPERATOR_ENABLED && !c.RENAISS_API_KEY) missing.push('RENAISS_API_KEY (required when OPERATOR_ENABLED=true and MOCK_MODE=false)');
     if (missing.length) throw new Error(`Invalid configuration: missing ${missing.join('; ')}`);
   }
-  return { ...c, MOCK_MODE, VERSION };
+  const fromChain = c.CHAIN_ID === 56 ? 'mainnet' : 'testnet';
+  const RENAISS_NETWORK = c.RENAISS_NETWORK ?? fromChain;
+  if (RENAISS_NETWORK !== fromChain) throw new Error(`Invalid configuration: RENAISS_NETWORK=${RENAISS_NETWORK} does not match CHAIN_ID=${c.CHAIN_ID}`);
+  return { ...c, MOCK_MODE, VERSION, RENAISS_NETWORK };
 }

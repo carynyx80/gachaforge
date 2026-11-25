@@ -38,8 +38,21 @@ describe('loadConfig', () => {
     expect(idx.MOCK_MODE).toBe(false);
     expect(idx.OPERATOR_ENABLED).toBe(false);
     expect(() => loadConfig({ FACTORY_ADDRESS: f, RPC_URL: 'https://rpc.example', OPERATOR_ENABLED: 'true' })).toThrow(/OPERATOR_PRIVATE_KEY/);
-    expect(loadConfig({ FACTORY_ADDRESS: f, RPC_URL: 'https://rpc.example', OPERATOR_ENABLED: 'true', OPERATOR_PRIVATE_KEY: '0x' + 'a'.repeat(64) }).OPERATOR_ENABLED).toBe(true);
+    const key = '0x' + 'a'.repeat(64);
+    expect(() => loadConfig({ FACTORY_ADDRESS: f, RPC_URL: 'https://rpc.example', OPERATOR_ENABLED: 'true', OPERATOR_PRIVATE_KEY: key })).toThrow(/RENAISS_API_KEY/);
+    expect(loadConfig({ FACTORY_ADDRESS: f, RPC_URL: 'https://rpc.example', OPERATOR_ENABLED: 'true', OPERATOR_PRIVATE_KEY: key, RENAISS_API_KEY: 'test-key' }).OPERATOR_ENABLED).toBe(true);
+    // mock mode never needs the key
+    expect(loadConfig({ OPERATOR_ENABLED: 'true' }).MOCK_MODE).toBe(true);
     expect(() => loadConfig({ MOCK_MODE: 'false' })).toThrow(/FACTORY_ADDRESS/);
+  });
+  it('Renaiss network follows CHAIN_ID; swap defaults', () => {
+    expect(loadConfig({}).RENAISS_NETWORK).toBe('testnet');
+    expect(loadConfig({ CHAIN_ID: '56' }).RENAISS_NETWORK).toBe('mainnet');
+    expect(() => loadConfig({ CHAIN_ID: '97', RENAISS_NETWORK: 'mainnet' })).toThrow(/does not match/);
+    const c = loadConfig({});
+    expect([c.SWAP_SLIPPAGE_BPS, c.SWAP_USDT_BUFFER_BPS, c.PANCAKE_ROUTER, c.USDT_ADDRESS, c.RENAISS_REGISTRY]).toEqual([100, 10, undefined, undefined, undefined]);
+    expect(() => loadConfig({ SWAP_SLIPPAGE_BPS: '5000' })).toThrow(/SWAP_SLIPPAGE_BPS/);
+    expect(() => loadConfig({ PANCAKE_ROUTER: '0xnope' })).toThrow(/PANCAKE_ROUTER/);
   });
   it('parses excluded list', () => {
     const a = '0x' + 'A'.repeat(40);

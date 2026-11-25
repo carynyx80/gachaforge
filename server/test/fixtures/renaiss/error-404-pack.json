@@ -1,0 +1,5 @@
+{
+  "_source": "openapi.json v2 GET /v2/gacha/packs/{slug} 404 schema",
+  "code": "CARD_PACK_NOT_FOUND",
+  "message": "Card pack not found"
+}

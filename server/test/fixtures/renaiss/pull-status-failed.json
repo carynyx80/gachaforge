@@ -1,0 +1,15 @@
+{
+  "_source": "synthesized from openapi.json v2 schema (GET /v2/gacha/pull/status 200, error codes from the status description) with real pandora-28 mainnet values; no real draw/offer payload is public",
+  "requestId": "0c6f3a52-7d1e-4b8a-9f21-3e5d7c9a1b24",
+  "buyerWalletAddress": "0x1111111111111111111111111111111111111111",
+  "packId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+  "nonce": "1764081234567",
+  "numOfTokens": 1,
+  "status": "FAILED",
+  "permitFundTxHash": null,
+  "error": {
+    "code": "INSUFFICIENT_ALLOWANCE",
+    "message": "The wallet has approved less USDT for Permit2 than the pull costs."
+  },
+  "result": null
+}

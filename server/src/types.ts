@@ -142,3 +142,24 @@ export type WsMessage =
   | { type: 'pull'; data: Pull }
   | { type: 'stats'; data: Stats }
   | { type: 'machine'; data: Machine };
+
+/** A raffled card waiting for the provider to release it (end of the buyback window) before we forward it. */
+export type CardReleaseStatus = 'PENDING' | 'DELIVERED' | 'FAILED';
+export interface CardRelease {
+  pullKey: string;
+  tokenId: string;
+  machine: string;
+  ticker: string;
+  winner: string;
+  cardName: string;
+  /** Unix seconds: earliest time the provider should have released the NFT to the operator wallet. */
+  releaseAt: number;
+  status: CardReleaseStatus;
+  attempts: number;
+  /** Unix seconds: next time the job looks at this row. */
+  nextAttemptAt: number;
+  lastError?: string;
+  txHash?: string;
+  createdAt: number;
+  updatedAt: number;
+}

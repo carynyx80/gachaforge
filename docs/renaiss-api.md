@@ -116,3 +116,38 @@ Testnet (chain 97): vending machine `0xeeddf88d5cb406cc27f6eea4636566b4943e3737`
 9. **transferCard**: remove the API call. Renaiss auto-releases the NFT to the buyer wallet after 72 h (`releaseTxHash`). Then our wallet calls `RenaissRegistry.safeTransferFrom(vault, to, tokenId)` on-chain (0xF8646A3C…5b30). Cards cannot be moved during the window.
 10. **New concerns**: we need a server-side signer wallet holding USDT plus BNB for gas (or rely on sponsored execution); handling of `Retry-After` on 429; polling about once per second with a 10-minute PENDING cap; idempotent resubmission of the same signed pull; and an env switch for chain 56 / 97 with matching contract constants. Consider using the SDK `@renaiss-protocol/client` (beta) instead of hand-rolled HTTP.
 11. **Access**: a builder key is required for all writes. Request it via info@renaiss.xyz with the app name, flows (Gacha), env/network, volume and signing origins. Until then only the public catalog (`/v2/gacha/packs*`) can be called.
+
+## Implementation (2026-11-25)
+
+**Wired** (`server/src`):
+- `renaiss/client.ts`: fetch client for v2 with zod-validated responses (`renaiss/schemas.ts`), `x-builder-api-key` only on builder routes, `x-request-id` per call, timeouts, 429 `Retry-After` and backoff (5xx is resent only for idempotent calls: GETs and `POST /pull/request`). We did not use the SDK `@renaiss-protocol/client@0.1.0-beta.5`: it is beta, declares `engines.node >= 24` (we run 22) and is built on fp-ts. Its request shapes and EIP-712 types are mirrored instead.
+- `renaiss/networks.ts`: contracts and slugs per network. Testnet's 88 pack slug is **`pandora-88`**; mainnet's is `pandora-88-plus`.
+- `renaiss/catalog.ts`: resolves slug → UUID, `onChainPackId`, price and release window, cached for 5 min. It throws if a slug is missing or not active, if the price is not exactly 28/48/88 USDT, or if the vending machine is not the network's.
+- `renaiss/provider.ts` (`RenaissProvider`):
+  - Pulls: prepare, then verify the response (same checks as the SDK, against our contracts and price). Then the USDT balance check, a one-time max `approve(Permit2)`, signing `PermitWitnessTransferFrom` (rebuilt locally from the verified fields), `/pull/request`, and a status poll every ~1 s with a 10-min cap. `OP_WALLET_BUSY` resends the same signed body.
+  - Cards are mapped by `renaiss/mapping.ts`: `valueUsd = buybackBaseValueInUSD/100`, plus Grader, Grade and Set from `attributes`.
+  - Sell-back: `/buyback/offers` (first unexpired tier), then `BuybackUserAuthorization` signed with domain `{name:"TokenVendingMachineV3", version:"1", chainId, verifyingContract: offer.vendingMachineAddress}` and types `{buybackIds: bytes32[], token: address, amount: uint256}`, then `/buyback/request`, polled until COMPLETED.
+  - Release: `ownerOf` on RenaissRegistry, then `safeTransferFrom(operator, winner, tokenId)`.
+- Multi-card pulls: we always request `quantity: 1`. If several draws come back, the value is summed (the pull's `card` is the top card, named "+N more"). A raffle winner gets every card, and a sell-back sends all of them in one signed batch.
+- `swap/pancake.ts`: `swapETHForExactTokens` buys the USDT shortfall plus `SWAP_USDT_BUFFER_BPS`, capped at the BNB the vault sent. The BNB spent is read from the WBNB `Deposit` log, and `refund = amountSent − spent` is passed to `settlePull`. After a sell-back, `swapExactTokensForETH` swaps the exact USDT proceeds, and the BNB received (WBNB `Withdrawal` log) is passed to `depositProceeds`. Both swaps have a `SWAP_SLIPPAGE_BPS` guard (default 100) and a deadline.
+- `operator/release.ts` with the `card_releases` table (`drizzle/0001_card_releases.sql`) and an in-memory implementation. Each raffled card is queued at `releaseAt` (end of the buyback window). The job checks that the operator owns the card, transfers it, and emits a "card delivered to 0x…" activity. It retries with backoff and marks the row FAILED after 10 attempts.
+- `operator/index.ts`: swap and buy run under one wallet lock across machines. The Renaiss `requestId` is saved as meta `provider-request:<pullKey>`. MOCK_MODE (and live mode without a key) uses `SimulatedProvider` and `SimulatedSwapper`.
+
+**Still unverified without a builder key** (built from the spec and SDK, not exercised end-to-end):
+1. That the `BuybackUserAuthorization` domain and types copied from the SDK bundle are what the API accepts.
+2. That `prepare.approval.requiredAmount` equals the full permit amount (the SDK assumes it does).
+3. The real draw `attributes` keys. Today's mapping uses the key names from public `/v2/marketplace/collectibles/{id}`; fallbacks parse the cert number, the image path and the name.
+4. How soon buyback offers appear after RESOLVED (we re-read offers for up to 60 s).
+5. Rate-limit numbers.
+6. Whether the NFT lands in the operator EOA exactly at the last tier's `expiresAt`.
+7. Testnet has no PancakeSwap liquidity for Renaiss's mock USDT. On chain 97, fund the operator with mock USDT directly (the swapper then buys nothing) or set `PANCAKE_ROUTER` to a pool you control.
+
+**Testnet checklist once a key exists:**
+1. Email info@renaiss.xyz for a **testnet** builder key (server-side use; no browser origins needed).
+2. In `server/.env` set: `CHAIN_ID=97`, `RENAISS_NETWORK=testnet`, `RENAISS_API_KEY=<key>`, `OPERATOR_ENABLED=true`, `OPERATOR_PRIVATE_KEY=<throwaway testnet key>`, plus `FACTORY_ADDRESS` and `RPC_URL` for chain 97.
+3. Fund the operator with tBNB (gas) and Renaiss mock USDT `0x3d27…958b` (at least 28).
+4. Run `RENAISS_LIVE=1 npx vitest run test/renaiss.live.test.ts` (public catalog check).
+5. Start the server. The catalog check runs at boot.
+6. Trigger one FORGE_28 pull and watch the logs: `approved USDT (max) for Permit2` → `renaiss pull submitted` → `pack bought` → `sold back` or `raffle recorded; delivery queued`.
+7. Compare the logged card's Grader, Grade and Set with the raw `/v2/gacha/pull/status` payload and adjust `mapping.ts` if needed.
+8. For a raffle, check the `card_releases` row and, after 72 h, the delivery tx.

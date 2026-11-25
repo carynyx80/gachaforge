@@ -1,4 +1,4 @@
-import type { ActivityEvent, BurnEvent, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type HolderRow, type Repository, type RewardsRow } from './repository.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -16,6 +16,7 @@ export class MemoryRepository implements Repository {
   private claims = new Map<string, DividendClaim>();
   private meta = new Map<string, string>();
   private counters = new Map<string, number>();
+  private releases = new Map<string, CardRelease>();
 
   async init() {}
   async close() {}
@@ -135,6 +136,27 @@ export class MemoryRepository implements Repository {
   async markClaimPushed(machine: string, epoch: number, wallet: string) {
     const c = this.claims.get(this.ck(machine, epoch, wallet));
     if (c) c.pushed = true;
+  }
+
+  async upsertCardRelease(r: CardRelease) {
+    this.releases.set(`${r.pullKey}|${r.tokenId}`, { ...r, machine: lc(r.machine), winner: lc(r.winner) });
+  }
+  async getCardRelease(pullKey: string, tokenId: string) {
+    const r = this.releases.get(`${pullKey}|${tokenId}`);
+    return r ? { ...r } : null;
+  }
+  async listDueCardReleases(now: number, limit: number) {
+    return [...this.releases.values()]
+      .filter((r) => r.status === 'PENDING' && r.nextAttemptAt <= now)
+      .sort((a, b) => a.releaseAt - b.releaseAt)
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
+  }
+  async listCardReleases(opts: { status?: CardRelease['status']; winner?: string } = {}) {
+    return [...this.releases.values()]
+      .filter((r) => (!opts.status || r.status === opts.status) && (!opts.winner || r.winner === lc(opts.winner)))
+      .sort((a, b) => a.releaseAt - b.releaseAt)
+      .map((r) => ({ ...r }));
   }
 
   async getMeta(key: string) {

@@ -1,0 +1,55 @@
+{
+  "_source": "live public GET https://api.renaiss.xyz/v2/marketplace/collectibles/7372...0096 on 2026-11-25 (unmodified)",
+  "collectible": {
+    "tokenId": "73721661518761489417662024120673404533370918401961634301179502961262112660096",
+    "name": "PSA 9 Mint 2023 Pokemon Japanese Sv1v-Violet Ex #097 Katy",
+    "ownerAddress": "0x14b662fc59f87ec004c2c25e0a2a49c9f858ef8c",
+    "askPriceInUSDT": "NO-ASK-PRICE",
+    "askExpiresAt": null,
+    "frontImageUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/graded-cards-renders/PSA77565797/nft_image.jpg",
+    "type": "POKEMON",
+    "attributes": [
+      {
+        "key": "Grader",
+        "value": "PSA"
+      },
+      {
+        "key": "Grade",
+        "value": "9 Mint"
+      },
+      {
+        "key": "Cert Number",
+        "value": "PSA77565797"
+      },
+      {
+        "key": "Year",
+        "value": "2023"
+      },
+      {
+        "key": "Set",
+        "value": "Pokemon Japanese Sv1v-Violet Ex"
+      },
+      {
+        "key": "Card Number",
+        "value": "097"
+      },
+      {
+        "key": "Character",
+        "value": "Katy"
+      },
+      {
+        "key": "Language",
+        "value": "Japanese"
+      }
+    ],
+    "rixPriceInUsd": "1545",
+    "rixPriceUpdatedAt": "2026-11-19T14:37:59.747Z",
+    "owner": null,
+    "backImageUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/graded-cards-renders/PSA77565797/nft_image_back.jpg"
+  },
+  "pricing": {
+    "top_offer": null,
+    "last_sale": null,
+    "price_history": []
+  }
+}

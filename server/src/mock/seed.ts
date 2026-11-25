@@ -5,6 +5,7 @@ import { now, round2, type Ledger } from '../ledger.js';
 import type { Logger } from '../log.js';
 import { planDividend, planPull } from '../operator/settle.js';
 import { mulberry32, randomCard, type Rng } from '../renaiss/simulated.js';
+import { toCard } from '../renaiss/types.js';
 import type { BurnEvent, Machine, PackId, Pull, Strategy, Trade } from '../types.js';
 
 /** Wallet that holds an eligible bag in every mock machine — handy for testing the rewards UI. */
@@ -189,7 +190,7 @@ export async function simulatePull(ctx: MockContext, address: string, ts = now()
   const won = plan.outcome === 'RAFFLE' && plan.winner;
   const proceedsUsd = won ? 0 : round2(card.valueUsd * 0.9);
   const proceedsBnb = round4(proceedsUsd / ctx.bnbUsd);
-  const { id: _id, ...cardData } = card;
+  const cardData = toCard(card);
   const pull: Pull = {
     id: pullKey,
     machine: m.address,

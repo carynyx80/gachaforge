@@ -1,0 +1,101 @@
+{
+  "_source": "live public GET https://dev-api.renaiss.xyz/v2/gacha/packs?stage=active&limit=50 on 2026-11-25 (unmodified)",
+  "cardPacks": [
+    {
+      "id": "c91a4aa9-054b-43ad-aec2-d08d6f3cf40c",
+      "slug": "entei-pack",
+      "name": "Entei Pack",
+      "packType": "v3-limited",
+      "stage": "active",
+      "description": "A limited-edition Renaiss pack arrives under the moonlight, with six hidden secrets waiting to be revealed.\n\nSix secrets. One moonlit chase. In the shadows, the moon rabbit guards six moon-marked cards hidden among the S, A, B, and C Tiers. Together, they form the LUNAR TIER, adding a special surprise to your next reveal.\n\nPull any LUNAR TIER card, and Renaiss will buy it back for $888, giving you the choice to keep your card or take the buyback offer. Each of the six carries the same offer—the decision is yours.\n\nOnly 666 packs are available at $100 per pack, launching September 24 at 5 PM (UTC+8). Pick your pack, enjoy the reveal, and see if one of the moon rabbit’s secrets is waiting inside.\n\nYour next reveal begins under the moonlight.",
+      "priceInUsdt": "100000000000000000000",
+      "expectedValueInUsd": "10525",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/entei/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/entei/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/entei/gacha.mp4",
+      "onChainPackId": "0x5405ec713e3299c0bd058ccc8b7c23cd0fd1e9db43fa1fd35c8aa3a849020135",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    },
+    {
+      "id": "8e2fe22d-2fa3-46bc-8f04-b2836b87e793",
+      "slug": "soar-pack",
+      "name": "Soar Pack",
+      "packType": "v3-limited",
+      "stage": "active",
+      "description": "⏳ CHRONO PACK introduces a new feature: the First-Hour Buyback Boost.\n\nThis week, the opening hour comes with something extra for collectors who choose Buyback. ✨\n\nFor the first hour after launch, the Buyback rate rises from 90% to 93% of your card’s fair market value (FMV). Every card you pull qualifies, regardless of its value.\n\nPull something you love? Make it part of your collection. Prefer to sell it back? Complete your Buyback within that opening hour to receive the boosted amount.\n\nAfter the first hour, the rate returns to the standard 90%.\n\nYour cards. Your choice. Make the golden hour count. 👀",
+      "priceInUsdt": "100000000000000000000",
+      "expectedValueInUsd": "10100",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/soar/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/soar/gacha.mp4",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/hollow/gacha.mp4",
+      "onChainPackId": "0xccc4808563ffb231b0fa5b871963968bce7e7ecc58dfbf66ad3e4ca1e33fc3c4",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    },
+    {
+      "id": "c449075a-4efe-453f-b2e0-6a14457f8520",
+      "slug": "pandora-28",
+      "name": "PANDORA 28",
+      "packType": "v3",
+      "stage": "active",
+      "description": "A new Pokémon chase starts here.\n\nThe new PANDORA 28 Pokémon Machine lets collectors discover real graded Pokémon cards at $28 per pull.\n\nAs the latest addition to the PANDORA lineup, it brings more choice across different price points. PANDORA offers multiple price points from $28 to $248, giving collectors more ways to choose their chase.\n\nUnlike a limited drop, PANDORA 28 stays live. Its vault-backed card pool is continuously refreshed, bringing new collectibles and fresh possibilities over time.\n\nEach pull is backed by transparent, verifiable mechanics. Merkle proofs and zero-knowledge validation anchor card provenance, while every result is provably random and verifiable on-chain.\n\nReal graded Pokémon cards. A new $28 entry point. More ways to chase.\n\nThe PANDORA 28 Machine is always open. Start with one pull. Your next Pokémon card could be one pull away.",
+      "priceInUsdt": "28000000000000000000",
+      "expectedValueInUsd": "3100",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/bg.webp",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.mp4",
+      "onChainPackId": "0x61a4c92ba92fa711ec3d78b9c12a0c52619053076d9d3552448efd76d6d141c4",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    },
+    {
+      "id": "3e8bb6fa-76b6-4267-ad4d-0ecbbf86b5a7",
+      "slug": "pandora-48",
+      "name": "PANDORA 48",
+      "packType": "v3",
+      "stage": "active",
+      "description": "Collectors, welcome to Renacrypt.\n\nIntroducing the Renacrypt Pack — an always-on collaborative card engine by Renaiss × Collector Crypt.\n\nThis is not a limited drop.\nThis is a perpetual system.\n\nAn infinite card machine powered by a continuously refreshed vault-backed pool — where real graded collectibles circulate dynamically in and out under live market alignment.\nEach pack is sealed with blockchain-level fairness.\n\nEvery card is encrypted, with its provenance anchored by Merkle proofs and zero-knowledge validation — ensuring that every pull is provably random, fully transparent, and verifiable on-chain.\n\nNo artificial scarcity.\nNo hidden mechanics.\n\nSupply flows.\nMarket aligns.\nFairness remains absolute.\n\nReal graded cards.\nVault-secured custody.\nLive, verifiable, on-chain.\n\nRenacrypt is where the machine never sleeps.\n\nPull anytime.\n",
+      "priceInUsdt": "48000000000000000000",
+      "expectedValueInUsd": "5300",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/bg.webp",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/gacha.mp4",
+      "onChainPackId": "0x214effaf953399dd20d8b8b139ad8f70b9742b0bf208f96c8483ac3e4121c0fc",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    },
+    {
+      "id": "2b8a6cc1-3693-4f10-a19e-dd8228632824",
+      "slug": "pandora-88",
+      "name": "PANDORA 88",
+      "packType": "v3",
+      "stage": "active",
+      "description": "Collectors, welcome to **Renacrypt**.\n\nIntroducing the Renacrypt Pack — an always-on collaborative card engine by Renaiss × Collector Crypt.\n\nThis is not a limited drop.\nThis is a perpetual system.\n\nAn infinite card machine powered by a continuously refreshed vault-backed pool — where real graded collectibles circulate dynamically in and out under live market alignment.\nEach pack is sealed with blockchain-level fairness.\n\nEvery card is encrypted, with its provenance anchored by Merkle proofs and zero-knowledge validation — ensuring that every pull is provably random, fully transparent, and verifiable on-chain.\n\nNo artificial scarcity.\nNo hidden mechanics.\n\nSupply flows.\nMarket aligns.\nFairness remains absolute.\n\nReal graded cards.\nVault-secured custody.\nLive, verifiable, on-chain.\n\nRenacrypt is where the machine never sleeps.\n\nPull anytime.",
+      "priceInUsdt": "88000000000000000000",
+      "expectedValueInUsd": "8800",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-248/bg_v3-yPtMXPZdsjgwXbg1syVdLzntNPZilr.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/renacrypt_new/gacha.renacrypt-x92uiBjGCZaxCIpDuyaZG8UumpAcr1.mp4",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/renacrypt_new/packrip.mp4",
+      "onChainPackId": "0x6ee6fb0085646cc20acba15dcf0d552e5318ad81ab7c56ca0fae9f214711198d",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    },
+    {
+      "id": "4a5b9404-17e1-4381-b1fd-6b0f995f1655",
+      "slug": "pandora-248",
+      "name": "PANDORA 248",
+      "packType": "v3",
+      "stage": "active",
+      "description": "Collectors, welcome to Renacrypt.\n\nIntroducing the Renacrypt Pack — an always-on collaborative card engine by Renaiss × Collector Crypt.\n\nThis is not a limited drop.\nThis is a perpetual system.\n\nAn infinite card machine powered by a continuously refreshed vault-backed pool — where real graded collectibles circulate dynamically in and out under live market alignment.\nEach pack is sealed with blockchain-level fairness.\n\nEvery card is encrypted, with its provenance anchored by Merkle proofs and zero-knowledge validation — ensuring that every pull is provably random, fully transparent, and verifiable on-chain.\n\nNo artificial scarcity.\nNo hidden mechanics.\n\nSupply flows.\nMarket aligns.\nFairness remains absolute.\n\nReal graded cards.\nVault-secured custody.\nLive, verifiable, on-chain.\n\nRenacrypt is where the machine never sleeps.\n\nPull anytime.",
+      "priceInUsdt": "250000000000000000000",
+      "expectedValueInUsd": "25000",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/cozy/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/cozy/gacha.mp4",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/cozy/gacha.mp4",
+      "onChainPackId": "0x2b984f71374d9865bdfb7be7527db7b32c8dec023b966aea0f2f4bf56b17dd08",
+      "vendingMachineAddress": "0xeeddf88d5cb406cc27f6eea4636566b4943e3737"
+    }
+  ],
+  "pagination": {
+    "total": 6,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": false
+  }
+}

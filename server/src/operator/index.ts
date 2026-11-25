@@ -7,17 +7,24 @@ import { excludedFor } from '../indexer/excluded.js';
 import type { Ledger } from '../ledger.js';
 import { now } from '../ledger.js';
 import type { Logger } from '../log.js';
-import type { CardProvider } from '../renaiss/provider.js';
+import type { CardProvider } from '../renaiss/types.js';
+import { summaryCard } from '../renaiss/types.js';
+import { refundFor, SimulatedSwapper, usdtToBuy, type Swapper } from '../swap/pancake.js';
+import { enqueueCardReleases } from './release.js';
 import type { Machine } from '../types.js';
 import { planDividend, planPull } from './settle.js';
 
 /**
- * Operator loop: for each machine, open a pull when pot >= pack cost, buy the pack from the
- * card provider, then raffle (RAFFLE/HIT_HUNTER) or sell back + deposit (+ merkle root for DIVIDEND/SPLIT).
+ * Operator loop: for each machine, open a pull when pot >= pack cost (vault sends ≤ price+10% BNB to the operator),
+ * swap just enough BNB→USDT, buy the pack from the card provider (Renaiss: Permit2-signed USDT pull), refund unspent
+ * BNB via settlePull, then raffle (card delivered after the provider's release window) or sell back → USDT→BNB →
+ * depositProceeds (+ merkle root for DIVIDEND/SPLIT).
  */
 export class Operator {
   private timer: NodeJS.Timeout | null = null;
   private busy = new Set<string>();
+  private lock: Promise<unknown> = Promise.resolve();
+  private swapper: Swapper;
 
   constructor(
     private cfg: Config,
@@ -25,7 +32,17 @@ export class Operator {
     private ledger: Ledger,
     private provider: CardProvider,
     private log: Logger,
-  ) {}
+    swapper?: Swapper,
+  ) {
+    this.swapper = swapper ?? new SimulatedSwapper(cfg.BNB_USD_PRICE);
+  }
+
+  /** Serialises operator-wallet USDT work (swap → buy, sell-back → swap) across machines. */
+  private walletLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.lock.then(fn, fn);
+    this.lock = run.catch(() => undefined);
+    return run;
+  }
 
   start() {
     if (!this.chain.walletClient || !this.chain.account) {
@@ -83,9 +100,25 @@ export class Operator {
     const pullKey = `${m.address}-${pullId}`;
     this.log.info({ machine: m.address, pullId: pullId.toString() }, 'pull opened');
 
-    // 2. buy the pack from Renaiss
-    const bought = await this.provider.buyPack(m.pack, receipt.transactionHash);
-    const card = bought.card;
+    // 2. fund + buy under the wallet lock (USDT balance and swaps are shared across machines)
+    const bought = await this.walletLock(async () => {
+      try {
+      const cost = await this.provider.packCost(m.pack);
+      const balance = await this.swapper.usdtBalance();
+      const toBuy = usdtToBuy(cost.usdt, balance, this.cfg.SWAP_USDT_BUFFER_BPS);
+      const swap = toBuy > 0n ? await this.swapper.buyExactUsdt(toBuy, amountSent) : { bnb: 0n, usdt: 0n };
+      const result = await this.provider.buyPack(m.pack, {
+        onSubmitted: (requestId) => this.ledger.repo.setMeta(`provider-request:${pullKey}`, requestId),
+      });
+        return { ...result, bnbSpent: swap.bnb };
+      } catch (err) {
+        // The pull stays OPEN on-chain; provider-request:<pullKey> meta (if set) is the Renaiss requestId to recover.
+        this.log.error({ err, pullKey, requestId: await this.ledger.repo.getMeta(`provider-request:${pullKey}`) }, 'pack purchase failed; pull left OPEN for manual recovery');
+        throw err;
+      }
+    });
+    const cards = bought.cards;
+    const card = summaryCard(cards);
     const cardValueWholeUsd = Math.floor(card.valueUsd); // contract compares whole USD
     await this.ledger.repo.upsertPull({
       id: pullKey,
@@ -93,17 +126,17 @@ export class Operator {
       ticker: m.ticker,
       pack: m.pack,
       round: Number(pullId),
-      card: { name: card.name, set: card.set, grader: card.grader, grade: card.grade, image: card.image, valueUsd: card.valueUsd },
+      card,
       result: 'SOLD', // provisional; RaffleRecorded / ProceedsDeposited (indexer) finalise
       txHash: receipt.transactionHash,
       timestamp: now(),
     });
 
-    // 3. settle: leftover slippage buffer returns to the pot.
-    // TODO(renaiss): real refund amount once we know what Renaiss charges; assumes the operator
-    // wallet is the payment receiver and paid exactly priceBnb.
+    // 3. settle: BNB from openPull that the swap did not spend returns to the pot.
     const operatorIsReceiver = paymentReceiver.toLowerCase() === this.chain.account!.address.toLowerCase();
-    const refund = operatorIsReceiver && amountSent > priceBnb ? amountSent - priceBnb : 0n;
+    const refund = operatorIsReceiver ? refundFor(amountSent, bought.bnbSpent) : 0n;
+    if (!operatorIsReceiver) this.log.warn({ pullKey, paymentReceiver }, 'paymentReceiver is not the operator wallet; no refund');
+    this.log.info({ pullKey, priceBnb: priceBnb.toString(), amountSent: amountSent.toString(), spent: bought.bnbSpent.toString(), refund: refund.toString(), cards: cards.length }, 'pack bought');
     await this.write(v, 'settlePull', [pullId, refund, BigInt(cardValueWholeUsd)], refund);
 
     // 4. snapshot holders at the open block and decide
@@ -116,8 +149,9 @@ export class Operator {
 
     if (plan.outcome === 'RAFFLE' && plan.winner) {
       await this.write(v, 'recordRaffle', [pullId, snapshotBlock, plan.snapshotHash, plan.seed, plan.winner]);
-      await this.provider.transferCard?.(card.id, plan.winner);
-      this.log.info({ pullKey, winner: plan.winner }, 'raffle recorded');
+      // Every card of the pull goes to the winner once the provider releases it (Renaiss: after 72h).
+      await enqueueCardReleases(this.ledger, { pullKey, machine: m.address, ticker: m.ticker, winner: plan.winner, cards });
+      this.log.info({ pullKey, winner: plan.winner, cards: cards.length }, 'raffle recorded; delivery queued');
       return;
     }
 
@@ -128,9 +162,13 @@ export class Operator {
     }
 
     // 5. sell back → deposit proceeds (vault routes by strategy into pot/dividend/burn/lp buckets)
-    const sold = await this.provider.sellBack(card.id);
-    // TODO(renaiss): Renaiss may pay out in BNB directly; until then convert at the configured price.
-    const proceedsWei = parseEther((sold.proceedsUsd / this.cfg.BNB_USD_PRICE).toFixed(18));
+    // Every card of the pull is sold back in one signed batch (same pack); USDT proceeds → BNB → vault.
+    const { sold, proceedsWei } = await this.walletLock(async () => {
+      const sold = await this.provider.sellBack(cards);
+      const swap = await this.swapper.sellUsdt(sold.proceedsUsdt);
+      return { sold, proceedsWei: swap.bnb };
+    });
+    this.log.info({ pullKey, proceedsUsdt: sold.proceedsUsdt.toString(), proceedsWei: proceedsWei.toString(), txRef: sold.txRef }, 'sold back');
     await this.write(v, 'depositProceeds', [pullId], proceedsWei);
 
     // 6. spend burn / LP reserves. TODO: compute minOut from a router quote (currently 0 = no slippage guard).

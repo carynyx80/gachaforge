@@ -1,0 +1,56 @@
+{
+  "_source": "live public GET https://api.renaiss.xyz/v2/gacha/packs?stage=active&limit=50 on 2026-11-25 (unmodified)",
+  "cardPacks": [
+    {
+      "id": "ff1da6af-a678-4abd-9b03-1594da093e48",
+      "slug": "pandora-88-plus",
+      "name": "PANDORA 88 Plus",
+      "packType": "v3",
+      "stage": "active",
+      "description": "An always-on entry point to Infinite Gacha, built for collectors who want to discover real graded Pokémon cards at an accessible price.\n\nUnlike a limited drop, this machine stays live. Its vault-backed card pool is continuously refreshed, bringing new possibilities every time you return.\n\nCard provenance is anchored through Merkle proofs and zero-knowledge validation, while every pull is provably random, transparent, and verifiable on-chain.\n\nCome back anytime.\nSee what’s in the pool.\nPull when you’re ready.\n\nReal graded Pokémon cards.\nVault-secured custody.\nTransparent, verifiable pulls.\n\nThe $88 Pokémon Machine is always open.\n\nYour next card could be one pull away.",
+      "priceInUsdt": "88000000000000000000",
+      "expectedValueInUsd": "8897",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-88/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-88/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-88/gacha.mp4",
+      "onChainPackId": "0x6c2cb6f547d4470786186cac4808dd04ef30f1eb71a94347129d20f5770fb403",
+      "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f"
+    },
+    {
+      "id": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+      "slug": "pandora-28",
+      "name": "PANDORA 28",
+      "packType": "v3",
+      "stage": "active",
+      "description": "A new Pokémon chase starts here.\n\nThe new PANDORA 28 Pokémon Machine lets collectors discover real graded Pokémon cards at $28 per pull.\n\nAs the latest addition to the PANDORA lineup, it brings more choice across different price points. PANDORA offers multiple price points from $28 to $248, giving collectors more ways to choose their chase.\n\nUnlike a limited drop, PANDORA 28 stays live. Its vault-backed card pool is continuously refreshed, bringing new collectibles and fresh possibilities over time.\n\nEach pull is backed by transparent, verifiable mechanics. Merkle proofs and zero-knowledge validation anchor card provenance, while every result is provably random and verifiable on-chain.\n\nReal graded Pokémon cards. A new $28 entry point. More ways to chase.\n\nThe PANDORA 28 Machine is always open. Start with one pull. Your next Pokémon card could be one pull away.",
+      "priceInUsdt": "28000000000000000000",
+      "expectedValueInUsd": "2830",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.mp4",
+      "onChainPackId": "0xcf11308cc7c642554a781b039a63a542c2f20b36f904b5b6981d48a2f76a5f90",
+      "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f"
+    },
+    {
+      "id": "7f8f864b-2278-486d-bfb4-445fe73ce7f9",
+      "slug": "pandora-48",
+      "name": "PANDORA 48",
+      "packType": "v3",
+      "stage": "active",
+      "description": "Ready to start the chase?\n\nThe new PANDORA 48 Pokémon Machine gives collectors an accessible way to discover real graded Pokémon cards.\n\nA more accessible entry point means more chances to explore, more cards to chase, and more possibilities behind every pull.\n\nUnlike a limited drop, this machine stays live. Its vault-backed card pool is continuously refreshed, bringing new collectibles and fresh possibilities over time.\n\nEach pull is backed by transparent, verifiable mechanics. Merkle proofs and zero-knowledge validation anchor card provenance, while every result is provably random and verifiable on-chain.\n\nReal graded Pokémon cards.\nAn accessible entry point.\nNo hidden mechanics.\n\nThe PANDORA 48 Machine is always open.\n\nStart with one pull. Your next Pokémon card could be one pull away.",
+      "priceInUsdt": "48000000000000000000",
+      "expectedValueInUsd": "4800",
+      "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/bg.mp4",
+      "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/gacha.webp",
+      "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-48/gacha.mp4",
+      "onChainPackId": "0x4de1e3c158c8630faa2db4e6c5250933188c4990ba30640a44a41eb6732d257d",
+      "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f"
+    }
+  ],
+  "pagination": {
+    "total": 3,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": false
+  }
+}

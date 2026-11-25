@@ -1,4 +1,4 @@
-import type { ActivityEvent, BurnEvent, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 
 export interface HolderRow {
   address: string;
@@ -53,6 +53,13 @@ export interface Repository {
   saveDividendClaims(claims: DividendClaim[]): Promise<void>;
   getDividendClaims(machine: string, wallet: string): Promise<DividendClaim[]>;
   markClaimPushed(machine: string, epoch: number, wallet: string): Promise<void>;
+
+  /** Card release queue (raffle deliveries). Upsert keyed by (pullKey, tokenId). */
+  upsertCardRelease(r: CardRelease): Promise<void>;
+  getCardRelease(pullKey: string, tokenId: string): Promise<CardRelease | null>;
+  /** PENDING rows with nextAttemptAt <= now, oldest releaseAt first. */
+  listDueCardReleases(now: number, limit: number): Promise<CardRelease[]>;
+  listCardReleases(opts?: { status?: CardRelease['status']; winner?: string }): Promise<CardRelease[]>;
 
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;

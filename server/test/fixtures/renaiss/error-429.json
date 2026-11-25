@@ -1,0 +1,5 @@
+{
+  "_source": "openapi.json v2 429 example",
+  "error": "Authentication rate limit exceeded",
+  "code": "API_AUTH_RATE_LIMITED"
+}

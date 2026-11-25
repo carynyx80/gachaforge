@@ -1,11 +1,11 @@
-import { and, asc, count, desc, eq, gt, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, lte, sql, sum } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as s from '../db/schema.js';
-import type { ActivityEvent, BurnEvent, DividendClaim, Machine, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type Repository } from './repository.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -179,6 +179,37 @@ export class PostgresRepository implements Repository {
       .where(and(eq(s.dividendClaims.machine, lc(machine)), eq(s.dividendClaims.epoch, epoch), eq(s.dividendClaims.wallet, lc(wallet))));
   }
 
+  async upsertCardRelease(r: CardRelease) {
+    const row = { ...r, machine: lc(r.machine), winner: lc(r.winner), lastError: r.lastError ?? null, txHash: r.txHash ?? null };
+    const { pullKey: _p, tokenId: _t, createdAt: _c, ...set } = row;
+    await this.db.insert(s.cardReleases).values(row).onConflictDoUpdate({ target: [s.cardReleases.pullKey, s.cardReleases.tokenId], set });
+  }
+  async getCardRelease(pullKey: string, tokenId: string) {
+    const r = await this.db
+      .select()
+      .from(s.cardReleases)
+      .where(and(eq(s.cardReleases.pullKey, pullKey), eq(s.cardReleases.tokenId, tokenId)));
+    return r[0] ? releaseRow(r[0]) : null;
+  }
+  async listDueCardReleases(now: number, limit: number) {
+    const r = await this.db
+      .select()
+      .from(s.cardReleases)
+      .where(and(eq(s.cardReleases.status, 'PENDING'), lte(s.cardReleases.nextAttemptAt, now)))
+      .orderBy(asc(s.cardReleases.releaseAt))
+      .limit(limit);
+    return r.map(releaseRow);
+  }
+  async listCardReleases(opts: { status?: CardRelease['status']; winner?: string } = {}) {
+    const conds = [opts.status ? eq(s.cardReleases.status, opts.status) : undefined, opts.winner ? eq(s.cardReleases.winner, lc(opts.winner)) : undefined].filter(Boolean);
+    const r = await this.db
+      .select()
+      .from(s.cardReleases)
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(asc(s.cardReleases.releaseAt));
+    return r.map(releaseRow);
+  }
+
   async getMeta(key: string) {
     const r = await this.db.select().from(s.meta).where(eq(s.meta.key, key));
     return r[0]?.value ?? null;
@@ -198,4 +229,9 @@ export class PostgresRepository implements Repository {
     const r = await this.db.select().from(s.counters).where(eq(s.counters.name, name));
     return r[0]?.value ?? 0;
   }
+}
+
+function releaseRow(r: typeof s.cardReleases.$inferSelect): CardRelease {
+  const { lastError, txHash, ...rest } = r;
+  return { ...rest, ...(lastError ? { lastError } : {}), ...(txHash ? { txHash } : {}) };
 }

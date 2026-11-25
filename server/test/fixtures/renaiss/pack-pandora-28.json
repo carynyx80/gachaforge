@@ -1,0 +1,71 @@
+{
+  "_source": "live public GET https://api.renaiss.xyz/v2/gacha/packs/pandora-28 on 2026-11-25 (unmodified)",
+  "cardPack": {
+    "id": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+    "slug": "pandora-28",
+    "name": "PANDORA 28",
+    "packType": "v3",
+    "stage": "active",
+    "description": "A new Pokémon chase starts here.\n\nThe new PANDORA 28 Pokémon Machine lets collectors discover real graded Pokémon cards at $28 per pull.\n\nAs the latest addition to the PANDORA lineup, it brings more choice across different price points. PANDORA offers multiple price points from $28 to $248, giving collectors more ways to choose their chase.\n\nUnlike a limited drop, PANDORA 28 stays live. Its vault-backed card pool is continuously refreshed, bringing new collectibles and fresh possibilities over time.\n\nEach pull is backed by transparent, verifiable mechanics. Merkle proofs and zero-knowledge validation anchor card provenance, while every result is provably random and verifiable on-chain.\n\nReal graded Pokémon cards. A new $28 entry point. More ways to chase.\n\nThe PANDORA 28 Machine is always open. Start with one pull. Your next Pokémon card could be one pull away.",
+    "priceInUsdt": "28000000000000000000",
+    "expectedValueInUsd": "2830",
+    "packBannerVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/bg.mp4",
+    "gachaMachineVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.webp",
+    "gachaRippingPackAnimationVideoUrl": "https://8nothtoc5ds7a0x3.public.blob.vercel-storage.com/packs/pokemon-28/gacha.mp4",
+    "onChainPackId": "0xcf11308cc7c642554a781b039a63a542c2f20b36f904b5b6981d48a2f76a5f90",
+    "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f",
+    "tiers": [
+      {
+        "tier": 3,
+        "name": "S",
+        "chance": 1,
+        "priceRangeInUsd": {
+          "min": "18000",
+          "max": "28037"
+        }
+      },
+      {
+        "tier": 2,
+        "name": "A",
+        "chance": 4,
+        "priceRangeInUsd": {
+          "min": "3600",
+          "max": "18000"
+        }
+      },
+      {
+        "tier": 1,
+        "name": "B",
+        "chance": 40,
+        "priceRangeInUsd": {
+          "min": "3112",
+          "max": "3600"
+        }
+      },
+      {
+        "tier": 0,
+        "name": "C",
+        "chance": 55,
+        "priceRangeInUsd": {
+          "min": "1900",
+          "max": "3112"
+        }
+      }
+    ],
+    "activeSetExpectedValueInUsd": "2865",
+    "buybackConfig": [
+      {
+        "buybackPercentage": 90,
+        "buybackExpiredInSeconds": 3600
+      },
+      {
+        "buybackPercentage": 85,
+        "buybackExpiredInSeconds": 86400
+      },
+      {
+        "buybackPercentage": 50,
+        "buybackExpiredInSeconds": 259200
+      }
+    ]
+  }
+}

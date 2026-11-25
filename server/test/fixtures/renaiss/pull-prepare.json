@@ -1,0 +1,94 @@
+{
+  "_source": "synthesized from openapi.json v2 schema (POST /v2/gacha/pull/prepare 200) with real pandora-28 mainnet values; no real draw/offer payload is public",
+  "chainId": 56,
+  "buyerWalletAddress": "0x1111111111111111111111111111111111111111",
+  "pack": {
+    "id": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+    "onChainPackId": "0xcf11308cc7c642554a781b039a63a542c2f20b36f904b5b6981d48a2f76a5f90",
+    "priceInUsdt": "28000000000000000000",
+    "vendingMachineAddress": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f"
+  },
+  "permit2TypedData": {
+    "domain": {
+      "name": "Permit2",
+      "chainId": 56,
+      "verifyingContract": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+    },
+    "types": {
+      "PermitWitnessTransferFrom": [
+        {
+          "name": "permitted",
+          "type": "TokenPermissions"
+        },
+        {
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256"
+        },
+        {
+          "name": "deadline",
+          "type": "uint256"
+        },
+        {
+          "name": "witness",
+          "type": "PermitFundWitness"
+        }
+      ],
+      "TokenPermissions": [
+        {
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "PermitFundWitness": [
+        {
+          "name": "packId",
+          "type": "bytes32"
+        },
+        {
+          "name": "builder",
+          "type": "bytes32"
+        },
+        {
+          "name": "numOfTokens",
+          "type": "uint256"
+        }
+      ]
+    },
+    "primaryType": "PermitWitnessTransferFrom",
+    "message": {
+      "permitted": {
+        "token": "0x55d398326f99059fF775485246999027B3197955",
+        "amount": "28000000000000000000"
+      },
+      "spender": "0xd4d18607d6111c5fa2f93a4a5b2c0e28f1563f9f",
+      "nonce": "1764081234567",
+      "deadline": "1764081534",
+      "witness": {
+        "packId": "0xcf11308cc7c642554a781b039a63a542c2f20b36f904b5b6981d48a2f76a5f90",
+        "builder": "0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+        "numOfTokens": "1"
+      }
+    }
+  },
+  "unsignedPullPayload": {
+    "packId": "4c3263d7-8aab-4498-af7b-2c8a7c484a55",
+    "builderCode": "0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+    "numOfTokens": 1,
+    "amountPerToken": "28000000000000000000",
+    "nonce": "1764081234567",
+    "deadline": 1764081534
+  },
+  "approval": {
+    "token": "0x55d398326f99059fF775485246999027B3197955",
+    "spender": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    "requiredAmount": "28000000000000000000"
+  }
+}
