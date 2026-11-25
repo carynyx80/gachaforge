@@ -1,5 +1,6 @@
 import type {
-  ActivityEvent, BurnEvent, DividendClaim, Machine, MachineQuery, Paged, Pull, RaffleProof, RewardsView, Stats, Trade,
+  ActivityEvent, BurnEvent, DividendClaim, Health, Machine, MachineQuery, PackId, Paged, Pull, RaffleProof, RewardsView, Stats, Strategy, Trade,
+  Transparency, TransparencyMachine, TransparencyTx,
 } from './types';
 import { mockActivity, mockBurns, mockMachines, mockPulls, mockStats, mockTrades } from './mock';
 
@@ -77,17 +78,139 @@ export async function getClaims(address: string, wallet: string): Promise<Paged<
   return get(`/machines/${address}/claims/${wallet}`);
 }
 
-/** Backend mode: 'live' only when it indexes real contracts. Any failure → treat as mock/preview. */
-export async function getHealthMode(): Promise<'mock' | 'live'> {
-  if (USE_MOCK) return 'mock';
+/** GET /api/health. Any failure → mode 'mock' (the safe default: preview banner stays visible). */
+export async function getHealth(): Promise<Health> {
+  if (USE_MOCK) return { mode: 'mock' };
   try {
     const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' });
-    if (!res.ok) return 'mock';
-    const j = (await res.json()) as { mode?: string };
-    return j.mode === 'live' ? 'live' : 'mock';
+    if (!res.ok) return { mode: 'mock' };
+    const j = (await res.json()) as Partial<Health> & { mode?: string };
+    // Only an explicit 'mock' (or an unreachable backend) is the preview; 'offchain' / 'vault' / 'live' are real.
+    const mode = typeof j.mode === 'string' && j.mode && j.mode !== 'mock' ? (j.mode as Health['mode']) : 'mock';
+    return { ...j, mode } as Health;
   } catch {
-    return 'mock';
+    return { mode: 'mock' };
   }
+}
+
+/** Backend mode ('offchain' | 'vault' | 'live' | 'mock'). */
+export async function getHealthMode(): Promise<Health['mode']> {
+  return (await getHealth()).mode;
+}
+
+export interface RegisterBody {
+  txHash: string;
+  pack: PackId;
+  strategy: Strategy;
+  split?: { dividendBps: number; burnBps: number; lpBps: number };
+  /** personal_sign by the launch tx sender over registerMessage(...) (lib/registerMessage.ts). */
+  signature?: string;
+}
+/** POST /api/machines/register — backend verifies the Portal launch tx on-chain, then records pack/strategy. */
+export async function registerMachine(body: RegisterBody): Promise<{ address?: string; machine?: Machine }> {
+  const res = await fetch(`${API_URL}/api/machines/register`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const j = (await res.json().catch(() => ({}))) as { address?: string; token?: string; machine?: Machine; error?: string; message?: string };
+  if (!res.ok) {
+    const err = new Error(j.message || j.error || `Register failed (${res.status})`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return { address: j.address ?? j.token ?? j.machine?.address, machine: j.machine };
+}
+
+// ------------------------------------------------------------------ transparency (normaliser)
+type Raw = Record<string, unknown>;
+const isObj = (v: unknown): v is Raw => !!v && typeof v === 'object' && !Array.isArray(v);
+/** Number in BNB from a number, decimal string, or integer wei string/bigint-ish. */
+export function bnbOf(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string' && v.trim()) {
+    if (/^\d+$/.test(v) && v.length > 12) return Number(BigInt(v)) / 1e18; // wei
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+const pick = (o: Raw | undefined, ...keys: string[]) => {
+  if (!o) return undefined;
+  for (const k of keys) if (o[k] !== undefined && o[k] !== null) return o[k];
+  return undefined;
+};
+const pickBnb = (o: Raw | undefined, ...keys: string[]) => {
+  for (const k of keys) { const v = bnbOf(o?.[k]); if (v !== undefined) return v; }
+  if (o) for (const k of keys) {
+    const w = o[k.replace(/Bnb$/, 'Wei')];
+    if (typeof w === 'string' && /^\d+$/.test(w)) return Number(BigInt(w)) / 1e18;
+    if (typeof w === 'number') return w / 1e18;
+  }
+  return undefined;
+};
+const tsOf = (v: unknown): number | undefined => {
+  if (typeof v === 'number') return v > 1e12 ? Math.floor(v / 1000) : v;
+  if (typeof v === 'string') { const n = Number(v); if (Number.isFinite(n)) return tsOf(n); const d = Date.parse(v); return Number.isFinite(d) ? Math.floor(d / 1000) : undefined; }
+  return undefined;
+};
+
+function wallet(raw: unknown, balances: Raw | undefined, key: 'treasury' | 'ops') {
+  const o = isObj(raw) ? raw : undefined;
+  const address = typeof raw === 'string' ? raw : (pick(o, 'address') as string | undefined);
+  const bal = pickBnb(o, 'balanceBnb', 'balance', 'bnb')
+    ?? pickBnb(balances, `${key}Bnb`, key, `${key}Balance`, `${key}BalanceBnb`)
+    ?? (isObj(balances?.[key]) ? pickBnb(balances![key] as Raw, 'balanceBnb', 'balance', 'bnb') : undefined);
+  return { address, balanceBnb: bal };
+}
+
+export function normalizeTransparency(j: Raw): Transparency {
+  const balances = isObj(j.balances) ? j.balances : undefined;
+  const owedRaw = isObj(j.owed) ? j.owed : {};
+  const machinesRaw = (Array.isArray(j.machines) ? j.machines : Array.isArray(j.pots) ? j.pots : Array.isArray(j.ledger) ? j.ledger : undefined) as unknown[] | undefined;
+  const machines: TransparencyMachine[] | undefined = machinesRaw?.filter(isObj).map((m) => ({
+    address: String(pick(m, 'address', 'machine', 'token') ?? ''),
+    ticker: pick(m, 'ticker', 'symbol') as string | undefined,
+    name: pick(m, 'name') as string | undefined,
+    potBnb: pickBnb(m, 'potBnb', 'pot', 'balanceBnb'),
+    potUsd: bnbOf(pick(m, 'potUsd')),
+    packPriceUsd: bnbOf(pick(m, 'packPriceUsd')),
+    creditedBnb: pickBnb(m, 'creditedBnb', 'inBnb', 'totalInBnb', 'potInBnb'),
+    taxBnb: pickBnb(m, 'taxBnb'),
+    dividendsPendingBnb: pickBnb(m, 'dividendsPendingBnb'),
+    spentBnb: pickBnb(m, 'spentBnb', 'outBnb', 'totalOutBnb', 'potOutBnb'),
+    pulls: bnbOf(pick(m, 'pulls', 'packsOpened')),
+    pullQueued: pick(m, 'pullQueued') === true,
+  }));
+  const txsRaw = (Array.isArray(j.txs) ? j.txs : Array.isArray(j.transactions) ? j.transactions : []) as unknown[];
+  const txs: TransparencyTx[] = txsRaw.filter(isObj).map((t) => ({
+    hash: typeof pick(t, 'hash', 'txHash', 'tx') === 'string' ? (pick(t, 'hash', 'txHash', 'tx') as string) : '',
+    kind: String(pick(t, 'kind', 'type', 'purpose') ?? 'TX'),
+    valueBnb: pickBnb(t, 'valueBnb', 'amountBnb', 'value', 'amount'),
+    to: (pick(t, 'to', 'recipient') as string | undefined) || undefined,
+    machine: (pick(t, 'machine', 'token') as string | undefined) || undefined,
+    label: (pick(t, 'label') as string | undefined) || undefined,
+    ticker: pick(t, 'ticker', 'symbol') as string | undefined,
+    timestamp: tsOf(pick(t, 'timestamp', 'ts', 'createdAt', 'time')),
+    status: pick(t, 'status') as string | undefined,
+  }));
+  return {
+    treasury: wallet(j.treasury, balances, 'treasury'),
+    ops: wallet(j.ops, balances, 'ops'),
+    owed: {
+      pots: pickBnb(owedRaw, 'pots', 'potsBnb') ?? 0,
+      buyback: pickBnb(owedRaw, 'buyback', 'buybackBnb') ?? 0,
+      dividendsPending: pickBnb(owedRaw, 'dividendsPending', 'dividendsPendingBnb', 'dividends') ?? 0,
+      burnsPending: pickBnb(owedRaw, 'burnsPending', 'burnsPendingBnb'),
+      total: pickBnb(owedRaw, 'total', 'totalBnb'),
+    },
+    machines,
+    txs,
+    updatedAt: tsOf(pick(j, 'updatedAt', 'timestamp', 'asOf')),
+  };
+}
+
+/** GET /api/transparency. Throws (incl. 404 while the backend is being deployed). */
+export async function getTransparency(): Promise<Transparency> {
+  return normalizeTransparency(await get<Raw>('/transparency'));
 }
 
 export async function getRecentPulls(limit = 20): Promise<Pull[]> {

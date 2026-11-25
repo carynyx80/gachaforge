@@ -37,6 +37,8 @@ export interface Machine {
   paidToHoldersBnb: number;
   burnedTokens: number;
   links?: { website?: string; x?: string; telegram?: string };
+  /** OFF-CHAIN MODE: pot is full but the pull waits (no Renaiss key / ops wallet / paused). UI: "Pull queued — card buying starts soon". */
+  pullQueued?: boolean;
 }
 
 export interface Card {

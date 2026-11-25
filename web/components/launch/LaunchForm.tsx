@@ -1,26 +1,47 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { PackId, Strategy } from '@/lib/types';
 import { PACK_PRICE } from '@/lib/types';
 import { FLAP_CUT_PCT, SPLIT, TAX_BPS, TAX_PCT } from '@/lib/economics';
 import { STRATEGY_INFO } from '@/lib/strategies';
 import { usd } from '@/lib/format';
-import { parseEther, parseEventLogs, type Hex } from 'viem';
-import { useWriteContract } from 'wagmi';
+import { isAddressEqual, parseEther, parseEventLogs, type Address, type Hash, type Hex } from 'viem';
+import { usePublicClient, useSignMessage, useWriteContract } from 'wagmi';
 import { bsc } from 'wagmi/chains';
-import { CONTRACTS_LIVE, FACTORY_ADDRESS } from '@/lib/chain';
-import { gachaForgeFactoryAbi } from '@/lib/abi/gachaForgeFactory';
+import {
+  FLAP_ANTI_FARMER_DURATION, FLAP_PORTAL, FLAP_TAX_DURATION, NATIVE, TREASURY_ADDRESS, ZERO_HASH, addrUrl, txUrl,
+} from '@/lib/chain';
+import { flapPortalAbi } from '@/lib/abi/flapPortal';
 import { mineVanitySalt } from '@/lib/vanity';
+import { uploadFlapMetadata } from '@/lib/flapUpload';
+import { registerMachine, type RegisterBody } from '@/lib/api';
+import { registerMessage } from '@/lib/registerMessage';
+import { short } from '@/lib/format';
 import { ActionButton } from '../wallet/ActionButton';
 import { TxStatus, useTx } from '../wallet/tx';
+import { useWallet } from '../wallet/useWallet';
+import { useOffT } from '../useOffchain';
 
 const PACKS: { id: PackId; max: string }[] = [
   { id: 'FORGE_28', max: '~10x' }, { id: 'FORGE_48', max: '~11x' }, { id: 'FORGE_88', max: '~9.9x' },
 ];
 const STRATS: Strategy[] = ['RAFFLE', 'HIT_HUNTER', 'DIVIDEND', 'BURN', 'SPLIT'];
-// Enum indices match contracts/src/libraries/GachaTypes.sol
-const PACK_INDEX: Record<PackId, number> = { FORGE_28: 0, FORGE_48: 1, FORGE_88: 2 };
-const STRATEGY_INDEX: Record<Strategy, number> = { RAFFLE: 0, HIT_HUNTER: 1, DIVIDEND: 2, BURN: 3, SPLIT: 4 };
+
+// flap IPortal enums (contracts/src/adapters/flap/IFlapPortal.sol)
+const DEX_THRESH_FOUR_FIFTHS = 1;
+const MIGRATOR_V2 = 1;
+const DEX0_PANCAKE = 0;
+const LP_FEE_STANDARD = 0;
+const TOKEN_TAXED_V3 = 6;
+
+/** Launch tx that confirmed but whose /api/machines/register call hasn't succeeded yet (survives reloads). */
+interface PendingReg extends RegisterBody { token?: string; ticker: string }
+const PENDING_KEY = 'gf:pendingRegister';
+const loadPending = (): PendingReg | null => { try { const v = localStorage.getItem(PENDING_KEY); return v ? (JSON.parse(v) as PendingReg) : null; } catch { return null; } };
+const savePending = (p: PendingReg | null) => { try { if (p) localStorage.setItem(PENDING_KEY, JSON.stringify(p)); else localStorage.removeItem(PENDING_KEY); } catch { /* storage unavailable */ } };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Phase = 'idle' | 'upload' | 'mine' | 'sign' | 'register' | 'done';
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
@@ -39,6 +60,7 @@ export function LaunchForm() {
   const [ticker, setTicker] = useState('');
   const [desc, setDesc] = useState('');
   const [img, setImg] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [x, setX] = useState('');
   const [tg, setTg] = useState('');
   const [web, setWeb] = useState('');
@@ -59,42 +81,153 @@ export function LaunchForm() {
   const buyBnb = Number(buy) || 0;
   const t = ticker.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
 
+  const ot = useOffT();
+  const w = useWallet();
+  const router = useRouter();
+  const client = usePublicClient({ chainId: bsc.id });
   const { writeContractAsync } = useWriteContract();
+  const { signMessageAsync } = useSignMessage();
   const tx = useTx();
-  const [mining, setMining] = useState<number | null>(null);
-  const [launched, setLaunched] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [mining, setMining] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingReg | null>(null);
+  const [regErr, setRegErr] = useState<string | null>(null);
+  useEffect(() => { setPending(loadPending()); }, []);
+
   const valid = name.trim().length > 0 && t.length > 0 && Number.isFinite(buyBnb) && buyBnb >= 0;
+  const busy = phase !== 'idle' && phase !== 'done';
+
+  /** POST /api/machines/register with a few retries (the backend may need a block or two to see the tx). */
+  const register = async (p: PendingReg) => {
+    setPhase('register');
+    setRegErr(null);
+    // The launch tx sender signs the canonical message so nobody else can pick pack/strategy (EIP-191 personal_sign).
+    if (!p.signature) {
+      if (!p.token) { setRegErr('Register failed: token address unknown'); setPhase('idle'); return; }
+      try {
+        const signature = await signMessageAsync({ message: registerMessage({ token: p.token, pack: p.pack, strategy: p.strategy, split: p.split, chainId: bsc.id }) });
+        p = { ...p, signature };
+        savePending(p);
+        setPending(p);
+      } catch (e) {
+        setRegErr((e as Error).message || 'Signature rejected');
+        setPhase('idle');
+        return;
+      }
+    }
+    let last: unknown;
+    for (let i = 0; i < 4; i++) {
+      try {
+        const r = await registerMachine({ txHash: p.txHash, pack: p.pack, strategy: p.strategy, split: p.split, signature: p.signature });
+        savePending(null);
+        setPending(null);
+        setPhase('done');
+        router.push(`/m/${r.address ?? p.token}`);
+        return;
+      } catch (e) {
+        last = e;
+        const status = (e as { status?: number }).status;
+        if (status === 401) { p = { ...p, signature: undefined }; savePending(p); setPending(p); break; } // bad signature: re-sign on retry
+        if (status && status >= 400 && status < 500 && status !== 404 && status !== 409 && status !== 425) break; // verification rejected
+        await sleep(2500 * (i + 1));
+      }
+    }
+    setRegErr(last instanceof Error ? last.message : 'Register failed');
+    setPhase('idle');
+  };
 
   const launch = async () => {
-    const factory = FACTORY_ADDRESS;
-    if (!factory || !valid) return;
-    setLaunched(null);
-    setMining(0);
-    let salt: Hex;
+    if (!valid || !file || !w.address || !client) return;
+    setErr(null);
+    setRegErr(null);
+    tx.reset();
+    let stage: Phase = 'upload';
     try {
-      ({ salt } = await mineVanitySalt((n) => setMining(n)));
-    } finally {
-      setMining(null);
-    }
-    const sp = strategy === 'SPLIT'
-      ? { dividendBps: split.dividend * 100, burnBps: split.burn * 100, lpBps: split.lp * 100 }
-      : { dividendBps: 0, burnBps: 0, lpBps: 0 };
-    const receipt = await tx.run(() => writeContractAsync({
-      address: factory, abi: gachaForgeFactoryAbi, functionName: 'launch', chainId: bsc.id,
-      // TODO(meta): upload image + metadata via flap (funcs.flap.sh/api/upload) and pass the CID here.
-      args: [{ name: name.trim(), symbol: t, meta: '', packId: PACK_INDEX[pack], strategy: STRATEGY_INDEX[strategy], taxBps: TAX_BPS, split: sp, salt, extraData: '0x' }],
-      value: parseEther(String(buyBnb)),
-    }), `Launch $${t}`);
-    if (receipt) {
-      const ev = parseEventLogs({ abi: gachaForgeFactoryAbi, logs: receipt.logs, eventName: 'MachineLaunched' })[0];
-      if (ev) setLaunched(ev.args.token);
+      // 1. image + metadata → flap.sh IPFS (returns metadata CID for `meta`)
+      setPhase('upload');
+      const cid = await uploadFlapMetadata(file, { description: desc, website: web, twitter: x, telegram: tg, creator: w.address });
+
+      // 2. vanity salt: Portal CREATE2 clone of Tax Token V3 impl must end in 7777 and be unused
+      stage = 'mine';
+      setPhase('mine');
+      setMining(0);
+      let salt: Hex, predicted: Address;
+      for (;;) {
+        ({ salt, token: predicted } = await mineVanitySalt((n) => setMining(n)));
+        const code = await client.getCode({ address: predicted });
+        if (!code || code === '0x') break;
+      }
+
+      // 3. Portal.newTokenV6 from the creator's wallet. Tax 2%/2% → 100% (mktBps) to the GachaForge treasury.
+      stage = 'sign';
+      setPhase('sign');
+      const value = parseEther(String(buyBnb));
+      const receipt = await tx.run(() => writeContractAsync({
+        address: FLAP_PORTAL, abi: flapPortalAbi, functionName: 'newTokenV6', chainId: bsc.id, value,
+        args: [{
+          name: name.trim(), symbol: t, meta: cid,
+          dexThresh: DEX_THRESH_FOUR_FIFTHS, salt, migratorType: MIGRATOR_V2,
+          quoteToken: NATIVE, quoteAmt: value, beneficiary: TREASURY_ADDRESS,
+          permitData: '0x', extensionID: ZERO_HASH, extensionData: '0x',
+          dexId: DEX0_PANCAKE, lpFeeProfile: LP_FEE_STANDARD,
+          buyTaxRate: TAX_BPS, sellTaxRate: TAX_BPS,
+          taxDuration: FLAP_TAX_DURATION, antiFarmerDuration: FLAP_ANTI_FARMER_DURATION,
+          mktBps: 10_000, deflationBps: 0, dividendBps: 0, lpBps: 0,
+          minimumShareBalance: BigInt(0), dividendToken: NATIVE, commissionReceiver: NATIVE,
+          tokenVersion: TOKEN_TAXED_V3,
+        }],
+      }), `Launch $${t}`);
+      if (!receipt) { setPhase('idle'); return; }
+      const ev = parseEventLogs({ abi: flapPortalAbi, logs: receipt.logs, eventName: 'TokenCreated' })
+        .find((l) => isAddressEqual(l.address, FLAP_PORTAL));
+      const token = ev?.args.token ?? predicted;
+
+      // 4. record pack/strategy off-chain (immutable once registered)
+      const p: PendingReg = {
+        txHash: receipt.transactionHash as Hash, pack, strategy, token, ticker: t,
+        ...(strategy === 'SPLIT' ? { split: { dividendBps: split.dividend * 100, burnBps: split.burn * 100, lpBps: split.lp * 100 } } : {}),
+      };
+      savePending(p);
+      setPending(p);
+      await register(p);
+    } catch (e) {
+      setErr(stage === 'upload' ? `${ot('l_upload_fail')}: ${(e as Error).message}` : (e as Error).message || 'Failed');
+      setPhase('idle');
     }
   };
+
+  const steps: { k: Phase; label: string }[] = [
+    { k: 'upload', label: ot('l_step_upload') }, { k: 'mine', label: ot('l_step_mine') },
+    { k: 'sign', label: ot('l_step_sign') }, { k: 'register', label: ot('l_step_register') },
+  ];
+  const order: Phase[] = ['upload', 'mine', 'sign', 'register', 'done'];
+  const at = order.indexOf(phase);
+  const btnLabel = phase === 'upload' ? ot('l_uploading')
+    : phase === 'mine' ? ot('l_mining', { n: Math.round(mining / 1000) })
+    : phase === 'sign' ? ot('l_launching')
+    : phase === 'register' ? ot('l_registering')
+    : !valid ? ot('l_enter') : !file ? ot('l_need_image') : ot('l_launch', { t });
+  const treasuryShort = `${TREASURY_ADDRESS.slice(0, 6)}…${TREASURY_ADDRESS.slice(-4)}`;
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-10">
       <h1 className="font-display text-3xl font-extrabold uppercase sm:text-[2.6rem]">Launch a <span className="neon-text text-accent">machine</span></h1>
-      <p className="mt-2 max-w-2xl text-muted">Your token, your gacha machine. Every setting below is locked forever at launch — choose carefully.</p>
+      <p className="mt-2 max-w-2xl text-muted">{ot('l_sub')}</p>
+      {pending && phase === 'idle' && (
+        <div role="alert" className="mt-6 flex flex-col gap-3 rounded-md border-2 border-accent bg-accent-soft/40 p-4 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-display font-bold uppercase">{ot('l_pending')} · ${pending.ticker}</div>
+            <p className="mt-1 text-fg/90">{ot('l_reg_fail')} {ot('l_reg_note')}</p>
+            {regErr && <p className="mt-1 font-mono text-xs text-danger">{regErr}</p>}
+            <a href={txUrl(pending.txHash)} target="_blank" rel="noreferrer" className="mt-1 inline-block font-mono text-xs text-muted underline">{short(pending.txHash)} ↗</a>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" className="btn-chunky px-4 py-2 text-sm" onClick={() => register(pending)}>{ot('l_reg_retry')}</button>
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => { savePending(null); setPending(null); }}>{ot('l_dismiss')}</button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <div className="flex min-w-0 flex-col gap-6">
@@ -105,7 +238,7 @@ export function LaunchForm() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={img} alt="preview" className="h-full w-full object-cover" />
                 ) : <span>Upload image<br />PNG / JPG / GIF</span>}
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setImg(URL.createObjectURL(f)); }} />
+                <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { setFile(f); setImg(URL.createObjectURL(f)); } }} />
               </label>
               <div className="grid gap-3">
                 <div className="grid grid-cols-[1fr_120px] gap-3">
@@ -197,14 +330,27 @@ export function LaunchForm() {
                 <div className="flex justify-between"><span className="text-muted">Initial buy</span><span className="font-mono">{buyBnb} BNB</span></div>
                 <div className="flex justify-between font-semibold"><span>Total</span><span className="font-mono">{buyBnb.toFixed(4)} BNB</span></div>
               </div>
-              <ActionButton onClick={launch} busy={tx.busy || mining !== null}
-                disabledLabel={CONTRACTS_LIVE ? undefined : 'Launching opens soon'}
-                disabled={!valid}>
-                {mining !== null ? `Mining token address… ${Math.round(mining / 1000)}k` : tx.busy ? 'Launching…' : valid ? `Launch $${t}` : 'Enter name & ticker'}
+              <div className="rounded-md border-2 border-accent/60 bg-bg p-3 text-xs leading-relaxed">
+                <div className="mb-1 font-display text-[11px] font-bold uppercase tracking-wide text-accent">{ot('l_before')}</div>
+                <p className="text-fg">{ot('l_disclose', { treasury: treasuryShort })}</p>
+                <a href={addrUrl(TREASURY_ADDRESS)} target="_blank" rel="noreferrer" className="mt-1 inline-block font-mono text-[10px] text-muted underline hover:text-fg">{TREASURY_ADDRESS} ↗</a>
+              </div>
+              {busy && (
+                <ol className="space-y-1 text-xs">
+                  {steps.map((st, i) => (
+                    <li key={st.k} className={`flex items-center gap-2 ${i < at ? 'text-success' : i === at ? 'text-fg' : 'text-muted'}`}>
+                      <span className="w-4 text-center font-mono">{i < at ? '✓' : i === at ? '›' : '·'}</span>{st.label}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <ActionButton onClick={launch} busy={busy || tx.busy} disabled={!valid || !file}>
+                {btnLabel}
               </ActionButton>
               <TxStatus state={tx.state} />
-              {launched && <a href={`/m/${launched}`} className="block text-center text-sm text-accent underline">Open your machine →</a>}
-              <p className="text-center text-xs text-muted">Launched on <span className="text-fg">flap.sh</span> · BNB Chain</p>
+              {err && <div role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">✕ {err}</div>}
+              {pending && phase === 'idle' && <a href={`/m/${pending.token}`} className="block text-center text-sm text-accent underline">{ot('l_open')}</a>}
+              <p className="text-center text-xs text-muted">{ot('l_via')}</p>
             </div>
           </div>
         </aside>

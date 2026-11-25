@@ -44,7 +44,7 @@ describe('API', () => {
   it('GET /api/health', async () => {
     const { status, body } = await get('/api/health');
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, mode: 'mock', chainId: 97, version: '0.1.0', treasury: '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c' });
+    expect(body).toEqual({ ok: true, mode: 'mock', chainId: 97, version: '0.1.0', treasury: '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c', opsReady: false, renaissReady: false });
   });
   it('CORS allows configured origins and gachaforge vercel previews only', async () => {
     const acao = async (origin: string) =>

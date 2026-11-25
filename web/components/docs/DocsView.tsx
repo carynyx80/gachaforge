@@ -290,12 +290,19 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
         <section className="space-y-5">
           <H id="safety" n={9}>{d.nav.safety}</H>
           <p className="text-muted">{d.safety.intro}</p>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="panel border-success/40 p-5"><H3>{d.safety.onchainTitle}</H3><div className="mt-3"><Bullets items={d.safety.onchain} mark="✓" /></div></div>
-            <div className="panel border-danger/40 p-5"><H3>{d.safety.trustedTitle}</H3><div className="mt-3"><Bullets items={d.safety.trusted} mark="!" /></div></div>
+          <div className="rounded-lg border border-danger/50 bg-danger/5 p-5">
+            <div className="font-display text-lg font-bold uppercase tracking-wide text-danger">{d.safety.custodialTitle}</div>
+            <p className="mt-2 text-sm text-fg/85">{d.safety.custodialBody}</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {([[d.safety.adminTitle, d.safety.admin], [d.safety.flapTitle, d.safety.flap], [d.safety.auditTitle, d.safety.audit], [d.safety.previewTitle, d.safety.previewBody]] as const).map(([t, b]) => (
+            <div className="panel border-danger/40 p-5"><H3>{d.safety.trustTitle}</H3><div className="mt-3"><Bullets items={d.safety.trust} mark="!" /></div></div>
+            <div className="panel border-success/40 p-5">
+              <H3>{d.safety.guardTitle}</H3><div className="mt-3"><Bullets items={d.safety.guards} mark="✓" /></div>
+              <a href="/transparency" className="mt-4 inline-block text-sm text-accent hover:underline">{d.safety.transparencyLink} →</a>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {([[d.safety.flapTitle, d.safety.flap], [d.safety.renaissTitle, d.safety.renaiss], [d.safety.auditTitle, d.safety.audit], [d.safety.previewTitle, d.safety.previewBody]] as const).map(([t, b]) => (
               <div key={t} className="panel p-5"><H3>{t}</H3><p className="mt-2 text-sm text-muted">{b}</p></div>
             ))}
           </div>
@@ -315,7 +322,7 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
                     <td className="px-4 py-3 font-mono text-xs">
                       {a.address
                         ? <a href={addrUrl(a.address)} target="_blank" rel="noreferrer" className="break-all text-glow hover:underline">{a.address}</a>
-                        : <span className="text-muted">{d.contracts.unset}</span>}
+                        : <span className="text-muted">{a.key === 'forge' ? d.contracts.unsetForge : d.contracts.unset}</span>}
                     </td>
                   </tr>
                 ))}

@@ -8,6 +8,14 @@ const INIT_HASH = keccak256(
 const PREFIX = concat(['0xff', FLAP_PORTAL]);
 
 /**
+ * Token address the Portal will deploy for `salt`: CREATE2(from = Portal, salt, keccak(EIP-1167 clone
+ * of Tax Token V3 impl)). Same derivation as FlapLauncher.predictToken / FlapMainnetFork._mineSalt.
+ */
+export function predictFlapToken(salt: Hex): Address {
+  return `0x${keccak256(concat([PREFIX, salt, INIT_HASH])).slice(26)}` as Address;
+}
+
+/**
  * Mine a CREATE2 salt so the Portal-deployed token address ends in 7777 (required by flap for tax
  * tokens; FlapLauncher reverts with BadVanity otherwise). ~65k tries on average; yields to the UI.
  */

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { ActivityEvent, Machine, Pull, Trade } from '@/lib/types';
 import { ago, num, short, usd } from '@/lib/format';
 import { STRATEGY_INFO } from '@/lib/strategies';
+import { TREASURY_ADDRESS } from '@/lib/chain';
 import { MachineArt } from '../MachineArt';
 import { CardThumb } from '../CardThumb';
 import { LivePot } from '../live/LivePot';
@@ -81,7 +82,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
           <p className="mt-1 text-sm text-muted">{m.description}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <CopyAddr label="CA" value={m.address} />
-            <CopyAddr label="Vault" value={m.vault} />
+            {/^0x[0-9a-fA-F]{40}$/.test(m.vault ?? '') && !/^0x0{40}$/.test(m.vault) && <CopyAddr label={m.vault.toLowerCase() === TREASURY_ADDRESS.toLowerCase() ? 'Tax →' : 'Vault'} value={m.vault} />}
             <a href={`${BSC}/token/${m.address}`} target="_blank" rel="noreferrer" className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:text-fg">BscScan ↗</a>
             {m.links?.x && <a href={m.links.x} target="_blank" rel="noreferrer" className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:text-fg">X ↗</a>}
             {m.links?.website && <a href={m.links.website} target="_blank" rel="noreferrer" className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:text-fg">Web ↗</a>}

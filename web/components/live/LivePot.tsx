@@ -7,6 +7,7 @@ import { PACK_LABEL, short, usd } from '@/lib/format';
 import { GachaMachine } from '../GachaMachine';
 import { AnimatedNumber } from './AnimatedNumber';
 import { onFeeEvent, useLiveFees } from './useLiveFees';
+import { useOffT } from '../useOffchain';
 
 interface Chip { id: string; text: string; side: FeeEvent['side'] }
 
@@ -20,6 +21,7 @@ export const FEE_ROWS = [
 /** Machine-page pot meter driven by live fee events (falls back to the server-rendered pot). */
 export function LivePot({ m, children }: { m: Machine; children?: ReactNode }) {
   const { pot, pulls, events } = useLiveFees(m.address, 1);
+  const t = useOffT();
   // When the server props last changed (router.refresh) — newer live values win over older props.
   const serverAt = useMemo(() => Date.now(), [m.potUsd]); // eslint-disable-line react-hooks/exhaustive-deps
   const packPrice = pot?.packPriceUsd || m.packPriceUsd;
@@ -84,6 +86,12 @@ export function LivePot({ m, children }: { m: Machine; children?: ReactNode }) {
             <span className="font-bold text-accent"><AnimatedNumber value={left} format={(n) => usd(n)} /> to rip</span>
             <span className="text-muted">{PACK_LABEL[m.pack]}</span>
           </div>
+          {m.pullQueued && (
+            <div role="status" className="mt-2 flex items-center gap-2 rounded-sm border border-accent/50 bg-accent-soft/60 px-2 py-1.5 text-xs font-semibold text-accent">
+              <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-accent" />
+              {t('pot_queued')}
+            </div>
+          )}
         </div>
       </div>
 

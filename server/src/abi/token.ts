@@ -20,4 +20,6 @@ export const taxProcessorAbi = parseAbi([
   'function marketAddress() view returns (address)',
   'function marketQuoteBalance() view returns (uint256)',
   'function totalQuoteSentToMarketing() view returns (uint256)',
+  'function feeReceiver() view returns (address)',
+  'function commissionReceiver() view returns (address)',
 ]);

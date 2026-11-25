@@ -14,7 +14,10 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "abi:sync": "node scripts/sync-abi.mjs"
+    "abi:sync": "node scripts/sync-abi.mjs",
+    "ops": "node dist/offchain/cli.js",
+    "ops:dev": "tsx src/offchain/cli.ts",
+    "test:fork": "BSC_RPC_URL=${BSC_RPC_URL:-https://bsc-rpc.publicnode.com} vitest run test/offchain.fork.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.4.3",

@@ -53,7 +53,7 @@ export class Ledger {
   }
 
   async saveMachine(m: Machine, broadcast = true) {
-    await this.repo.upsertMachine(m);
+    await this.repo.upsertMachine({ ...m, pullQueued: m.pullQueued ?? false });
     if (broadcast) this.bus.publish({ type: 'machine', data: (await this.repo.getMachine(m.address))! });
     this.scheduleStats();
   }

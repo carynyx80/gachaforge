@@ -21,6 +21,11 @@ const forgeLog: Logger = {
   debug: (o, m) => app.log.debug(o as object, m),
 };
 const forge = new ForgeService({ cfg: forgeCfg, repo, bus, log: forgeLog, bnbUsdFallback: cfg.BNB_USD_PRICE });
+// OFF-CHAIN MODE (default without FACTORY_ADDRESS): custodial ops wallet + off-chain ledger, no GachaForge contracts.
+// Safety: a signing ops wallet needs the durable ledger (pots, payout queue, daily cap) — refuse to sign on the memory store.
+const memoryOps = cfg.MODE === 'offchain' && !!cfg.OPS_PRIVATE_KEY && !cfg.DATABASE_URL && !cfg.OPS_ALLOW_MEMORY;
+const offCfg = memoryOps ? { ...cfg, OPS_PRIVATE_KEY: undefined } : cfg;
+const offchain = cfg.MODE === 'offchain' ? await (await import('./offchain/service.js')).OffchainService.create({ cfg: offCfg, ledger, log: forgeLog, forge }) : undefined;
 const app = await buildApp({
   ledger,
   bus,
@@ -28,12 +33,25 @@ const app = await buildApp({
   excluded: cfg.EXCLUDED_ADDRESSES,
   logger: { level: cfg.LOG_LEVEL },
   forge,
-  health: { mode: cfg.MOCK_MODE ? 'mock' : 'live', chainId: cfg.CHAIN_ID, version: cfg.VERSION, treasury: cfg.TREASURY_ADDRESS },
+  offchain,
+  health: {
+    mode: cfg.MODE,
+    chainId: cfg.CHAIN_ID,
+    version: cfg.VERSION,
+    treasury: cfg.TREASURY_ADDRESS,
+    opsReady: cfg.MODE === 'offchain' ? !!cfg.OPS_PRIVATE_KEY : cfg.MODE === 'vault' && cfg.OPERATOR_ENABLED && !!cfg.OPERATOR_PRIVATE_KEY,
+    renaissReady: !!cfg.RENAISS_API_KEY,
+  },
 });
 const log = app.log;
 const stops: (() => void)[] = [];
 
-if (cfg.MOCK_MODE) {
+if (offchain) {
+  if (memoryOps) log.error({}, 'OPS_PRIVATE_KEY ignored: no DATABASE_URL (set DATABASE_URL, or OPS_ALLOW_MEMORY=true for local tests). Running read-only.');
+  offchain.start();
+  stops.push(() => offchain.stop());
+  log.info({ chainId: cfg.CHAIN_ID, rpc: cfg.RPC_URLS.map((u) => new URL(u).host), treasury: cfg.TREASURY_ADDRESS, ops: offchain.ops.address, opsPaused: cfg.OPS_PAUSED, dailyCapBnb: cfg.OPS_DAILY_CAP_BNB, renaissReady: offchain.renaissReady, store: cfg.DATABASE_URL ? 'postgres' : 'memory' }, 'OFF-CHAIN mode');
+} else if (cfg.MOCK_MODE) {
   const { createMockContext, seedMock, startSimulator } = await import('./mock/seed.js');
   const opts = { bnbUsd: cfg.BNB_USD_PRICE, excluded: cfg.EXCLUDED_ADDRESSES, log };
   // Postgres may already hold seeded data from a previous run — don't double-seed.
@@ -62,7 +80,7 @@ if (cfg.MOCK_MODE) {
     releases.start();
     stops.push(() => releases.stop());
   }
-  log.info({ chainId: cfg.CHAIN_ID, factory: cfg.FACTORY_ADDRESS, provider: provider.name, swapper: swapper.name, renaissNetwork: cfg.RENAISS_NETWORK, operatorEnabled: cfg.OPERATOR_ENABLED, operator: chain.account?.address ?? null, treasury: cfg.TREASURY_ADDRESS }, 'chain mode');
+  log.info({ mode: 'vault', chainId: cfg.CHAIN_ID, factory: cfg.FACTORY_ADDRESS, provider: provider.name, swapper: swapper.name, renaissNetwork: cfg.RENAISS_NETWORK, operatorEnabled: cfg.OPERATOR_ENABLED, operator: chain.account?.address ?? null, treasury: cfg.TREASURY_ADDRESS }, 'chain mode');
 }
 
 await forge.start();

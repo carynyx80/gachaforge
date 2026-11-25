@@ -29,6 +29,13 @@
       "when": 1795632705250,
       "tag": "0003_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795634767537,
+      "tag": "0004_offchain",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,8 @@ export interface Machine {
   paidToHoldersBnb: number;
   burnedTokens: number;
   links?: { website?: string; x?: string; telegram?: string };
+  /** Off-chain mode: pot ≥ pack price but card buying (Renaiss) isn't enabled yet. */
+  pullQueued?: boolean;
 }
 
 export interface Pull {
@@ -78,6 +80,57 @@ export interface RewardsView {
   oddsPct: number;
   claimableBnb: number;
   totalEarnedBnb: number;
+  /** Off-chain mode: BNB already pushed to this wallet by dividend rounds (optional; hidden if absent). */
+  paidBnb?: number;
+  /** Off-chain mode: recent dividend payouts to this wallet (optional). */
+  payouts?: { amountBnb: number; txHash: string; timestamp: number }[];
+}
+
+/** GET /api/health */
+export type HealthMode = 'mock' | 'live' | 'offchain' | 'vault';
+export interface Health {
+  mode: HealthMode;
+  chainId?: number;
+  treasury?: string;
+  /** Off-chain mode: ops hot wallet configured + funded. */
+  opsReady?: boolean;
+  /** Off-chain mode: Renaiss card buying enabled. */
+  renaissReady?: boolean;
+}
+
+/** Normalised GET /api/transparency (SPEC "OFF-CHAIN MODE"). All amounts in BNB. */
+export interface TransparencyTx {
+  hash: string;
+  kind: string;
+  valueBnb?: number;
+  to?: string;
+  machine?: string;
+  ticker?: string;
+  timestamp?: number;
+  status?: string;
+  label?: string;
+}
+export interface TransparencyMachine {
+  address: string;
+  ticker?: string;
+  name?: string;
+  potBnb?: number;
+  potUsd?: number;
+  packPriceUsd?: number;
+  creditedBnb?: number;
+  taxBnb?: number;
+  dividendsPendingBnb?: number;
+  spentBnb?: number;
+  pulls?: number;
+  pullQueued?: boolean;
+}
+export interface Transparency {
+  treasury: { address?: string; balanceBnb?: number };
+  ops: { address?: string; balanceBnb?: number };
+  owed: { pots: number; buyback: number; dividendsPending: number; burnsPending?: number; total?: number };
+  machines?: TransparencyMachine[];
+  txs: TransparencyTx[];
+  updatedAt?: number;
 }
 
 export interface Trade {

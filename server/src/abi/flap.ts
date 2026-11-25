@@ -24,3 +24,23 @@ export const vaultPortalAbi = parseAbi([
   'event FlapTaxVaultTokenCreated(address indexed token, address indexed vault, address indexed vaultFactory)',
   'event TokenVaultRefreshed(address indexed token, address indexed oldVault, address indexed newVault)',
 ]);
+
+/**
+ * Portal launch + trade entry points (struct field order verified against FlapVaultExample IPortal.sol and fork-tested in
+ * contracts/test/fork/FlapMainnetFork.t.sol). quoteExactInput is non-view on-chain; declared `view` here so it can be
+ * eth_call'ed with readContract.
+ */
+export const portalOpsAbi = parseAbi([
+  'struct NewTokenV6Params { string name; string symbol; string meta; uint8 dexThresh; bytes32 salt; uint8 migratorType; address quoteToken; uint256 quoteAmt; address beneficiary; bytes permitData; bytes32 extensionID; bytes extensionData; uint8 dexId; uint8 lpFeeProfile; uint16 buyTaxRate; uint16 sellTaxRate; uint64 taxDuration; uint64 antiFarmerDuration; uint16 mktBps; uint16 deflationBps; uint16 dividendBps; uint16 lpBps; uint256 minimumShareBalance; address dividendToken; address commissionReceiver; uint8 tokenVersion; }',
+  'struct ExactInputParams { address inputToken; address outputToken; uint256 inputAmount; uint256 minOutputAmount; bytes permitData; }',
+  'struct QuoteExactInputParams { address inputToken; address outputToken; uint256 inputAmount; }',
+  'function newTokenV6(NewTokenV6Params params) payable returns (address token)',
+  'function swapExactInput(ExactInputParams params) payable returns (uint256 outputAmount)',
+  'function quoteExactInput(QuoteExactInputParams params) view returns (uint256 outputAmount)',
+]);
+
+/** Tax Token V3 implementation (CREATE2 clone base; vanity suffix 7777) per chain. */
+export const FLAP_TAX_TOKEN_IMPL = {
+  56: '0x024f18294970B5c76c0691b87f138A0317156422',
+  97: '0xE6Ff967a887084c16D0fD71548CF709542cc1557',
+} as const satisfies Record<56 | 97, `0x${string}`>;

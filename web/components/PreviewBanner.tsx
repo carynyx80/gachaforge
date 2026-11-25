@@ -1,22 +1,32 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { getHealthMode } from '@/lib/api';
+import { useHealth, useOffT } from './useOffchain';
 
-/** Shown unless the backend reports mode: 'live'. Defaults to visible (safe) until health answers. */
+/**
+ * mode 'mock' (or backend unreachable) → "Preview — simulated activity".
+ * mode 'offchain' → nothing, or a small "Card buying starts soon" note while renaissReady is false.
+ * any other real mode ('vault' / 'live') → nothing. Defaults to the preview banner (safe) until health answers.
+ */
 export function PreviewBanner() {
-  const [live, setLive] = useState(false);
-  useEffect(() => {
-    let on = true;
-    getHealthMode().then((m) => { if (on) setLive(m === 'live'); });
-    return () => { on = false; };
-  }, []);
-  if (live) return null;
+  const t = useOffT();
+  const { data } = useHealth();
+  const mode = data?.mode ?? 'mock';
+  if (mode !== 'mock' && mode !== 'offchain') return null;
+  if (mode === 'offchain') {
+    if (data?.renaissReady !== false) return null;
+    return (
+      <div role="status" className="border-b border-line bg-bg/90">
+        <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 px-4 py-1 text-center text-[11px] text-muted">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          <span>{t('b_soon')}</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div role="status" className="sticky top-16 z-40 border-b border-accent/40 bg-bg/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 py-1.5 text-center text-xs">
-        <span className="rounded-sm border border-accent px-1.5 py-px font-display font-bold uppercase tracking-wide text-accent">Preview</span>
-        <span className="text-fg">Simulated activity. Contracts not yet live on BNB Chain.</span>
-        <span className="text-muted">预览：模拟数据，合约尚未在 BNB Chain 上线。</span>
+        <span className="rounded-sm border border-accent px-1.5 py-px font-display font-bold uppercase tracking-wide text-accent">{t('b_preview')}</span>
+        <span className="text-fg">{t('b_preview_text')}</span>
       </div>
     </div>
   );

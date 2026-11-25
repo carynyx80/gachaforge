@@ -46,15 +46,15 @@ const notFound = (reply: FastifyReply, what: string) => reply.code(404).send({ e
 
 export async function registerRoutes(
   app: FastifyInstance,
-  deps: { ledger: Ledger; excluded: string[]; health?: { mode: 'mock' | 'live'; chainId: number; version: string; treasury: string } },
+  deps: { ledger: Ledger; excluded: string[]; health?: Record<string, unknown> | (() => Record<string, unknown>) },
 ) {
   const { ledger } = deps;
   const repo = ledger.repo;
-  const health = deps.health ?? { mode: 'mock' as const, chainId: 97, version: '0.0.0', treasury: '' };
+  const health = deps.health ?? { mode: 'mock' as const, chainId: 97, version: '0.0.0', treasury: '', opsReady: false, renaissReady: false };
 
   app.get('/health', async () => ({ ok: true }));
   // Railway healthcheck + frontend "Preview — simulated activity" banner (mode === 'mock').
-  app.get('/api/health', async () => ({ ok: true, ...health }));
+  app.get('/api/health', async () => ({ ok: true, ...(typeof health === 'function' ? health() : health) }));
 
   app.get('/api/stats', async () => ledger.stats());
 
@@ -67,18 +67,18 @@ export async function registerRoutes(
     if (pack) items = items.filter((m) => m.pack === pack);
     if (stage) items = items.filter((m) => m.stage === stage);
     items.sort(sorters[sort]);
-    return { items: items.slice((page - 1) * pageSize, page * pageSize), total: items.length };
+    return { items: items.slice((page - 1) * pageSize, page * pageSize).map(withDefaults), total: items.length };
   });
 
   // Registered before :address so the static segment wins.
   app.get('/api/machines/about-to-rip', async () => {
     const items = await repo.listMachines();
-    return items.sort((a, b) => b.potUsd / b.packPriceUsd - a.potUsd / a.packPriceUsd).slice(0, 3);
+    return items.sort((a, b) => b.potUsd / b.packPriceUsd - a.potUsd / a.packPriceUsd).slice(0, 3).map(withDefaults);
   });
 
   app.get<{ Params: { address: string } }>('/api/machines/:address', async (req, reply) => {
     const m = await repo.getMachine(req.params.address);
-    return m ?? notFound(reply, 'machine');
+    return m ? withDefaults(m) : notFound(reply, 'machine');
   });
 
   app.get<{ Params: { address: string } }>('/api/machines/:address/pulls', async (req, reply) => {
@@ -164,4 +164,6 @@ export async function registerRoutes(
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** SPEC: `pullQueued` is always present on machines (rows stored before the field existed default to false). */
+const withDefaults = (m: Machine): Machine => ({ ...m, pullQueued: m.pullQueued ?? false });
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;

@@ -1,66 +1,26 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { erc20Abi, formatUnits, isAddress, maxUint256, parseUnits, type Address } from 'viem';
-import { useBalance, useReadContract, useWriteContract } from 'wagmi';
-import { bsc } from 'wagmi/chains';
-import { FLAP_PORTAL, NATIVE } from '@/lib/chain';
-import { flapPortalAbi } from '@/lib/abi/flapPortal';
+import { useMemo, useState } from 'react';
 import type { ForgeToken } from '@/lib/forge';
 import { ActionButton } from '../wallet/ActionButton';
-import { TxStatus, useTx } from '../wallet/tx';
-import { useWallet } from '../wallet/useWallet';
+import { TxStatus } from '../wallet/tx';
+import { fmtUnits as fmt, useFlapTrade } from '../trade/useFlapTrade';
 import { useForgeT } from './useForge';
 
-const fmt = (v: bigint | undefined, d = 4) => (v === undefined ? '—' : Number(formatUnits(v, 18)).toLocaleString('en-US', { maximumFractionDigits: d }));
 const SLIPS = [50, 100, 200, 500] as const; // bps
 
-function useDebounced<T>(v: T, ms = 350) {
-  const [d, setD] = useState(v);
-  useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]);
-  return d;
-}
-
 /**
- * Full-width $FORGE trade bar. flap Portal quoteExactInput / swapExactInput (works on the curve and
- * after graduation). Enabled whenever the token is live — independent of NEXT_PUBLIC_FACTORY_ADDRESS.
+ * Full-width $FORGE trade bar. Trade logic is shared with machine pages (components/trade/useFlapTrade):
+ * flap Portal quoteExactInput / swapExactInput (works on the curve and after graduation).
+ * Enabled whenever the token is live — independent of NEXT_PUBLIC_FACTORY_ADDRESS.
  * Mobile: sticky bottom bar that expands into a sheet. Desktop: prominent inline panel.
  */
 export function ForgeTradeBar({ token, preview }: { token: ForgeToken; preview: boolean }) {
   const t = useForgeT();
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
-  const [amt, setAmt] = useState('0.1');
   const [slip, setSlip] = useState<number>(200);
   const [open, setOpen] = useState(false);
-  const w = useWallet();
-  const addr = token.address as Address;
-  const enabled = !preview && isAddress(token.address);
-  const { writeContractAsync } = useWriteContract();
-  const tx = useTx();
   const sym = token.symbol || 'FORGE';
-
-  const { data: bnbBal, refetch: refetchBnb } = useBalance({ address: w.address, chainId: bsc.id, query: { enabled: enabled && !!w.address } });
-  const { data: tokBal, refetch: refetchTok } = useReadContract({
-    address: addr, abi: erc20Abi, functionName: 'balanceOf', args: w.address ? [w.address] : undefined, chainId: bsc.id,
-    query: { enabled: enabled && !!w.address },
-  });
-  const { data: allowance, refetch: refetchAllow } = useReadContract({
-    address: addr, abi: erc20Abi, functionName: 'allowance', args: w.address ? [w.address, FLAP_PORTAL] : undefined, chainId: bsc.id,
-    query: { enabled: enabled && !!w.address && side === 'SELL' },
-  });
-
-  const amountIn = useMemo(() => {
-    try { return amt && Number(amt) > 0 ? parseUnits(amt.trim(), 18) : undefined; } catch { return undefined; }
-  }, [amt]);
-  const debounced = useDebounced(amountIn);
-  const inputToken = side === 'BUY' ? NATIVE : addr;
-  const outputToken = side === 'BUY' ? addr : NATIVE;
-  const quote = useReadContract({
-    address: FLAP_PORTAL, abi: flapPortalAbi, functionName: 'quoteExactInput', chainId: bsc.id,
-    args: debounced ? [{ inputToken, outputToken, inputAmount: debounced }] : undefined,
-    query: { enabled: enabled && !!debounced, refetchInterval: 12_000 },
-  });
-  const quoteOut = debounced === amountIn ? quote.data : undefined;
-  const minOut = quoteOut !== undefined ? (quoteOut * BigInt(10_000 - slip)) / BigInt(10_000) : undefined;
+  const ft = useFlapTrade({ token: token.address, symbol: sym, enabled: !preview, slipBps: slip });
+  const { enabled, wallet: w, side, switchSide, amt, setAmt, pick, amountIn, quoteOut, minOut, balance, over, tx, submit } = ft;
 
   // Preview: rough estimate from the price so the layout reads right (never sent anywhere).
   const estPreview = useMemo(() => {
@@ -68,39 +28,12 @@ export function ForgeTradeBar({ token, preview }: { token: ForgeToken; preview: 
     return side === 'BUY' ? Number(amt) / token.priceBnb : Number(amt) * token.priceBnb;
   }, [enabled, amt, side, token.priceBnb]);
 
-  const balance = side === 'BUY' ? bnbBal?.value : tokBal;
-  const over = amountIn !== undefined && balance !== undefined && amountIn > balance;
-  const needsApproval = side === 'SELL' && amountIn !== undefined && (allowance ?? BigInt(0)) < amountIn;
+  const label = ft.status === 'enter' ? t('enter_amount')
+    : ft.status === 'insufficient' ? `${t('insufficient')} ${side === 'BUY' ? 'BNB' : sym}`
+    : ft.status === 'quote_na' ? t('quote_na')
+    : ft.status === 'fetching' ? t('fetching')
+    : ft.status === 'approve' ? t('approve_sell') : `${side === 'BUY' ? t('buy') : t('sell')} $${sym}`;
 
-  const pick = (q: string) => {
-    if (side === 'BUY') return setAmt(q);
-    if (tokBal === undefined) return;
-    const pct = q === 'Max' ? 100 : Number(q.slice(0, -1));
-    setAmt(formatUnits((tokBal * BigInt(pct)) / BigInt(100), 18));
-  };
-
-  const submit = async () => {
-    if (!amountIn || minOut === undefined) return;
-    if (needsApproval) {
-      const ok = await tx.run(() => writeContractAsync({ address: addr, abi: erc20Abi, functionName: 'approve', args: [FLAP_PORTAL, maxUint256], chainId: bsc.id }), `Approve $${sym}`);
-      await refetchAllow();
-      if (!ok) return;
-    }
-    const r = await tx.run(() => writeContractAsync({
-      address: FLAP_PORTAL, abi: flapPortalAbi, functionName: 'swapExactInput', chainId: bsc.id,
-      args: [{ inputToken, outputToken, inputAmount: amountIn, minOutputAmount: minOut, permitData: '0x' }],
-      value: side === 'BUY' ? amountIn : BigInt(0),
-    }), side === 'BUY' ? `Buy $${sym}` : `Sell $${sym}`);
-    if (r) { refetchBnb(); refetchTok(); }
-  };
-
-  const label = !amountIn ? t('enter_amount')
-    : over ? `${t('insufficient')} ${side === 'BUY' ? 'BNB' : sym}`
-    : quote.isError ? t('quote_na')
-    : minOut === undefined ? t('fetching')
-    : needsApproval ? t('approve_sell') : `${side === 'BUY' ? t('buy') : t('sell')} $${sym}`;
-
-  const switchSide = (s: 'BUY' | 'SELL') => { setSide(s); setAmt(s === 'BUY' ? '0.1' : ''); tx.reset(); };
   const outSym = side === 'BUY' ? sym : 'BNB';
   const recv = enabled ? fmt(quoteOut) : estPreview !== undefined ? estPreview.toLocaleString('en-US', { maximumFractionDigits: side === 'BUY' ? 0 : 4 }) : '—';
   const minRecv = enabled ? fmt(minOut) : estPreview !== undefined ? (estPreview * (1 - slip / 10_000)).toLocaleString('en-US', { maximumFractionDigits: side === 'BUY' ? 0 : 4 }) : '—';

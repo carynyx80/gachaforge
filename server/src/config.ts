@@ -39,11 +39,14 @@ const schema = z.object({
     ),
   /** Required in live mode (FACTORY_ADDRESS set and MOCK_MODE off). */
   RPC_URL: z.string().url().optional(),
+  /** Default: 56 in offchain mode, 97 otherwise. */
   CHAIN_ID: z.coerce
     .number()
     .int()
     .refine((v) => v === 56 || v === 97, 'CHAIN_ID must be 56 (BSC) or 97 (BSC testnet)')
-    .default(97),
+    .optional(),
+  /** offchain (default without FACTORY_ADDRESS) | vault (on-chain contracts, default with FACTORY_ADDRESS) | mock (preview). */
+  MODE: z.enum(['offchain', 'vault', 'mock']).optional(),
   FACTORY_ADDRESS: address.optional(),
   START_BLOCK: z.coerce.bigint().optional(),
   /** Company treasury wallet. Informational only — NOT excluded from holder eligibility. */
@@ -89,9 +92,77 @@ const schema = z.object({
   OPERATOR_POLL_MS: z.coerce.number().int().positive().default(5000),
   SIM_INTERVAL_MS: z.coerce.number().int().positive().default(400),
   LOG_LEVEL: z.string().default('info'),
+
+  // ── OFF-CHAIN MODE (SPEC "OFF-CHAIN MODE"; docs/OFFCHAIN-OPS.md) ──
+  /** Hot wallet that pays for everything (pulls, payouts, burns, buybacks, dispatch gas). Unset → read-only, actions queued. */
+  OPS_PRIVATE_KEY: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, 'must be a 0x-prefixed 32-byte hex key')
+    .optional(),
+  /** Rolling-24h cap on BNB leaving the ops wallet (tx value + gas), sweeps excluded. */
+  OPS_DAILY_CAP_BNB: z.coerce.number().nonnegative().default(1),
+  /** Allow a signing ops wallet with the in-memory store (dev only: pots, payout queue and the daily cap reset on restart). */
+  OPS_ALLOW_MEMORY: boolish.default(false),
+  /** Kill switch: no outgoing tx at all (everything is recorded as QUEUED). */
+  OPS_PAUSED: boolish.default(false),
+  /** Gas buffer kept in the ops wallet on top of everything owed (sweep never touches it). */
+  OPS_RESERVE_BNB: z.coerce.number().nonnegative().default(0.05),
+  /** Per-pull cap above the pack price at Chainlink BNB/USD, bps (1000 = +10%). */
+  OPS_PULL_BUFFER_BPS: z.coerce.number().int().min(0).max(3000).default(1000),
+  OPS_TX_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
+  OPS_TX_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  /** Cooldown between two pulls of the same machine. */
+  PULL_COOLDOWN_SEC: z.coerce.number().int().nonnegative().default(60),
+  /** Dividend shares below this stay in the machine's dividend bucket for the next round. */
+  DIVIDEND_MIN_BNB: z.coerce.number().nonnegative().default(0.0005),
+  /** Max dividend transfers sent per ops tick (the rest wait in the payout queue). */
+  DIVIDEND_BATCH_SIZE: z.coerce.number().int().positive().default(25),
+  /** $FORGE buyback runs once the buyback ledger holds at least this much. */
+  BUYBACK_MIN_BNB: z.coerce.number().nonnegative().default(0.05),
+  /** Machine-token burns (BURN/HIT_HUNTER/SPLIT) run once a machine's burn bucket holds at least this much. */
+  BURN_MIN_BNB: z.coerce.number().nonnegative().default(0.0005),
+  /** Slippage guard for Portal swapExactInput buys (bps below the quote). */
+  BURN_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(3000).default(300),
+  /** Skip TaxProcessor.dispatch() when its gas would exceed this % of the pending tax. */
+  DISPATCH_MAX_GAS_PCT: z.coerce.number().positive().max(100).default(10),
+  /** Portal TokenCreated with tax recipient == TREASURY gets auto-registered (FORGE_28 / RAFFLE) after this long. */
+  AUTO_REGISTER_DELAY_SEC: z.coerce.number().int().nonnegative().default(600),
+  /** Optional cold wallet for the 90% platform share (only when the ops wallet IS the treasury). */
+  SWEEP_TO_ADDRESS: address.optional(),
+  SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(6 * 3600_000),
+  SWEEP_MIN_BNB: z.coerce.number().nonnegative().default(0.05),
+  KEEPER_POLL_MS: z.coerce.number().int().positive().default(60_000),
+  /** Max addresses per eth_getLogs address filter (public RPCs reject long lists). */
+  LOGS_ADDRESS_BATCH: z.coerce.number().int().min(1).max(1000).default(50),
+  /** Max eth_getLogs block range for the off-chain indexer (adaptive below it). */
+  LOGS_MAX_RANGE: z.coerce.number().int().min(10).max(50_000).default(2000),
+  /** Off-chain estimate of flap.sh's cut until real treasury receipts have been measured, bps of the tax. */
+  FLAP_CUT_ESTIMATE_BPS: z.coerce.number().int().min(0).max(5000).default(1000),
+  /** Mainnet RPC fallback (shared with the $FORGE watcher) used by offchain mode when RPC_URL is unset. */
+  FORGE_RPC_URL: z.string().optional(),
 });
 
-export type Config = Omit<z.infer<typeof schema>, 'MOCK_MODE' | 'RENAISS_NETWORK'> & { MOCK_MODE: boolean; VERSION: string; RENAISS_NETWORK: 'mainnet' | 'testnet' };
+export type Mode = 'offchain' | 'vault' | 'mock';
+export type Config = Omit<z.infer<typeof schema>, 'MOCK_MODE' | 'RENAISS_NETWORK' | 'MODE' | 'CHAIN_ID'> & {
+  MODE: Mode;
+  /** = MODE === 'mock' (kept for the vault/mock code paths). */
+  MOCK_MODE: boolean;
+  CHAIN_ID: 56 | 97;
+  VERSION: string;
+  RENAISS_NETWORK: 'mainnet' | 'testnet';
+  /** Offchain mode: RPC_URL, else FORGE_RPC_URL's first entry, else the public BSC RPC (chain 56 only). */
+  RPC_URLS: string[];
+};
+
+/** MODE explicit wins; MOCK_MODE=true → mock; FACTORY_ADDRESS → vault; otherwise offchain. */
+export function resolveMode(c: { MODE?: Mode; MOCK_MODE?: boolean; FACTORY_ADDRESS?: string }): Mode {
+  if (c.MODE) return c.MODE;
+  if (c.MOCK_MODE === true) return 'mock';
+  if (c.FACTORY_ADDRESS) return 'vault';
+  return 'offchain';
+}
+
+export const PUBLIC_BSC_RPCS = ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org'];
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   // Treat empty strings as unset so `.env.example` copied verbatim works.
@@ -104,17 +175,27 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     throw new Error(`Invalid configuration: ${msg}`);
   }
   const c = parsed.data;
-  const MOCK_MODE = c.MOCK_MODE ?? !c.FACTORY_ADDRESS;
-  if (!MOCK_MODE) {
-    const missing: string[] = [];
-    if (!c.FACTORY_ADDRESS) missing.push('FACTORY_ADDRESS (required when MOCK_MODE=false)');
+  const MODE = resolveMode(c);
+  const MOCK_MODE = MODE === 'mock';
+  const CHAIN_ID = (c.CHAIN_ID ?? (MODE === 'offchain' ? 56 : 97)) as 56 | 97;
+  const missing: string[] = [];
+  if (MODE === 'vault') {
+    if (!c.FACTORY_ADDRESS) missing.push('FACTORY_ADDRESS (required when MODE=vault)');
     if (!c.RPC_URL) missing.push('RPC_URL (required when FACTORY_ADDRESS is set)');
     if (c.OPERATOR_ENABLED && !c.OPERATOR_PRIVATE_KEY) missing.push('OPERATOR_PRIVATE_KEY (required when OPERATOR_ENABLED=true)');
     if (c.OPERATOR_ENABLED && !c.RENAISS_API_KEY) missing.push('RENAISS_API_KEY (required when OPERATOR_ENABLED=true and MOCK_MODE=false)');
-    if (missing.length) throw new Error(`Invalid configuration: missing ${missing.join('; ')}`);
   }
-  const fromChain = c.CHAIN_ID === 56 ? 'mainnet' : 'testnet';
+  let RPC_URLS: string[] = c.RPC_URL ? [c.RPC_URL] : [];
+  if (MODE === 'offchain' && !RPC_URLS.length) {
+    if (CHAIN_ID !== 56) missing.push('RPC_URL (required for offchain mode on CHAIN_ID=97)');
+    else {
+      const forge = (c.FORGE_RPC_URL ?? '').split(',').map((s) => s.trim()).filter((u) => /^https?:\/\//.test(u));
+      RPC_URLS = [...new Set([...forge, ...PUBLIC_BSC_RPCS])];
+    }
+  }
+  if (missing.length) throw new Error(`Invalid configuration: missing ${missing.join('; ')}`);
+  const fromChain = CHAIN_ID === 56 ? 'mainnet' : 'testnet';
   const RENAISS_NETWORK = c.RENAISS_NETWORK ?? fromChain;
-  if (RENAISS_NETWORK !== fromChain) throw new Error(`Invalid configuration: RENAISS_NETWORK=${RENAISS_NETWORK} does not match CHAIN_ID=${c.CHAIN_ID}`);
-  return { ...c, MOCK_MODE, VERSION, RENAISS_NETWORK };
+  if (RENAISS_NETWORK !== fromChain) throw new Error(`Invalid configuration: RENAISS_NETWORK=${RENAISS_NETWORK} does not match CHAIN_ID=${CHAIN_ID}`);
+  return { ...c, MODE, MOCK_MODE, CHAIN_ID, VERSION, RENAISS_NETWORK, RPC_URLS };
 }
