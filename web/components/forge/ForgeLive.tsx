@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { addrUrl, txUrl } from '@/lib/chain';
 import { ago, short } from '@/lib/format';
-import { FORGE_SUPPLY, compact, flapTokenUrl, pancakeUrl, priceFmt, type ForgeToken, type ForgeTrade } from '@/lib/forge';
+import { FORGE_SUPPLY, compact, flapTokenUrl, forgeLinks, pancakeUrl, priceFmt, type ForgeAutoBurn, type ForgeToken, type ForgeTrade } from '@/lib/forge';
+import { LogoMark } from '../Logo';
 import { useTween } from '../live/AnimatedNumber';
 import { useForgeT } from './useForge';
 
@@ -22,6 +23,7 @@ const linkCls = 'inline-flex items-center gap-1 rounded-md border border-line bg
 export function ForgeHeader({ token, preview }: { token: ForgeToken; preview: boolean }) {
   const t = useForgeT();
   const curve = token.stage === 'CURVE';
+  const links = forgeLinks(token);
   return (
     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex min-w-0 items-center gap-4">
@@ -30,7 +32,7 @@ export function ForgeHeader({ token, preview }: { token: ForgeToken; preview: bo
             // eslint-disable-next-line @next/next/no-img-element
             <img src={token.image} alt="" className="h-full w-full object-cover" />
           ) : (
-            <span className="grid h-full w-full place-items-center font-display text-2xl font-black text-black sm:text-3xl">F</span>
+            <LogoMark size={80} className="block h-full w-full" />
           )}
         </div>
         <div className="min-w-0">
@@ -61,11 +63,35 @@ export function ForgeHeader({ token, preview }: { token: ForgeToken; preview: bo
         <div className="flex flex-wrap gap-2">
           <a className={linkCls} href={flapTokenUrl(token.address)} target="_blank" rel="noreferrer">flap.sh ↗</a>
           <a className={linkCls} href={addrUrl(token.address)} target="_blank" rel="noreferrer">BscScan ↗</a>
-          {token.links?.x && <a className={linkCls} href={token.links.x} target="_blank" rel="noreferrer">X ↗</a>}
-          {token.links?.telegram && <a className={linkCls} href={token.links.telegram} target="_blank" rel="noreferrer">Telegram ↗</a>}
-          {token.links?.website && <a className={linkCls} href={token.links.website} target="_blank" rel="noreferrer">Web ↗</a>}
+          <a className={linkCls} href={links.x} target="_blank" rel="noreferrer">X ↗</a>
+          {links.telegram && <a className={linkCls} href={links.telegram} target="_blank" rel="noreferrer">Telegram ↗</a>}
+          <a className={linkCls} href={links.website} target="_blank" rel="noreferrer">Web ↗</a>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Deployer-supply auto-burn status. Renders nothing unless enabled and waiting/done. */
+export function ForgeAutoBurnCard({ autoBurn }: { autoBurn?: ForgeAutoBurn }) {
+  const t = useForgeT();
+  if (!autoBurn?.enabled) return null;
+  if (autoBurn.status === 'waiting') {
+    return (
+      <div role="status" className="flex items-center gap-2 self-start rounded-md border border-accent/50 bg-accent-soft px-3 py-2 font-mono text-xs">
+        <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-accent" /></span>
+        <span className="text-fg">{t('ab_waiting')}</span>
+      </div>
+    );
+  }
+  if (autoBurn.status !== 'done') return null;
+  let amt = Number(autoBurn.amount);
+  if (Number.isFinite(amt) && amt > FORGE_SUPPLY * 10) amt = amt / 1e18; // raw wei
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 self-start rounded-md border border-danger/50 bg-danger/10 px-3 py-2 font-mono text-xs">
+      <span className="font-display font-bold uppercase text-fg">{t('ab_done')} <span className="forge-flame">🔥</span></span>
+      {Number.isFinite(amt) && amt > 0 && <span className="font-bold text-fg">{compact(amt, 2)} <span className="text-accent">$FORGE</span></span>}
+      {autoBurn.txHash && <><span className="text-muted">·</span><a href={txUrl(autoBurn.txHash)} target="_blank" rel="noreferrer" className="text-glow hover:underline">tx ↗</a></>}
     </div>
   );
 }

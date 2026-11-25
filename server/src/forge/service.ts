@@ -21,6 +21,7 @@ import {
   ZERO,
   type ForgeClient,
 } from './chain.js';
+import type { ForgeAutoBurner } from './autoburn.js';
 import type { ForgeConfig } from './config.js';
 import { matchCreation, toCreationLog, type CreationLog } from './discovery.js';
 import { buildCandles, chainlinkUsd, curvePrice, decodePairSwap, marketCap, pairPrice, round, sig, stats24h, tradeValues, wad } from './math.js';
@@ -47,7 +48,12 @@ export interface ForgeServiceDeps {
   /** Used only if Chainlink can't be read. */
   bnbUsdFallback?: number;
   scan?: Partial<ScanOptions>;
+  /** $FORGE auto-burn (FORGE_AUTO_BURN): burns the deployer's balance once the token is discovered. */
+  autoBurn?: ForgeAutoBurner;
 }
+
+/** Discovery poll interval while FORGE_AUTO_BURN is armed and $FORGE isn't discovered yet (BSC blocks ≈0.75–3 s). */
+export const AUTO_BURN_POLL_MS = 1500;
 
 type AnyLog = { address: string; eventName?: string; args?: any; blockNumber: bigint | null; logIndex: number | null; transactionHash: string | null; blockTimestamp?: bigint | number | null };
 
@@ -118,6 +124,48 @@ export class ForgeService implements ForgeApi {
     const rec = await this.repo.getForgeRecord();
     if (rec && (!this.cfg.tokenOverride || eq(rec.token.address, this.cfg.tokenOverride))) this.record = rec;
     if (!this.record && this.cfg.preview) this.startPreview();
+    const ab = this.d.autoBurn;
+    if (ab) {
+      await ab.init();
+      ab.onBurned = async () => {
+        if (!this.record) return; // adopt() publishes once it finishes
+        await this.refresh();
+        this.d.bus.publish({ type: 'forge', data: this.wsToken() });
+      };
+      // Discovered before (e.g. restart mid-burn, or the flag was enabled after discovery): finish the one-time burn.
+      if (this.record) this.triggerAutoBurn(this.record.token.address, this.record.token.creator, this.record.token.symbol);
+    }
+  }
+
+  /** Poll interval: fast while auto-burn is armed and $FORGE is still undiscovered. */
+  get pollMs() {
+    return this.d.autoBurn?.armed && !this.record ? Math.min(this.cfg.pollMs, AUTO_BURN_POLL_MS) : this.cfg.pollMs;
+  }
+
+  /** Burns only a token actually created by FORGE_DEPLOYER (never an arbitrary FORGE_TOKEN_ADDRESS). */
+  private triggerAutoBurn(token: string, creator: string, symbol: string) {
+    const ab = this.d.autoBurn;
+    if (!ab?.armed) return;
+    if (!this.cfg.deployer || !eq(creator, this.cfg.deployer)) {
+      this.d.log.error({ token, creator, deployer: this.cfg.deployer ?? null }, '$FORGE auto-burn skipped: token creator is not FORGE_DEPLOYER');
+      return;
+    }
+    const self = this;
+    // Getters: the burn finishes after adopt() has loaded the real symbol/price.
+    void ab.trigger({
+      token,
+      get symbol() {
+        return self.record?.token.symbol || symbol;
+      },
+      get priceUsd() {
+        return self.record?.token.priceUsd ?? 0;
+      },
+    });
+  }
+
+  private wsToken(): ForgeToken {
+    const t = this.record!.token;
+    return this.d.autoBurn ? { ...t, autoBurn: this.d.autoBurn.status() } : t;
   }
 
   async start() {
@@ -126,7 +174,7 @@ export class ForgeService implements ForgeApi {
     const loop = async () => {
       if (this.stopped) return;
       await this.tick();
-      if (!this.stopped) this.timer = setTimeout(loop, this.cfg.pollMs);
+      if (!this.stopped) this.timer = setTimeout(loop, this.pollMs);
     };
     void loop();
   }
@@ -135,6 +183,7 @@ export class ForgeService implements ForgeApi {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.stopPreview();
+    this.d.autoBurn?.stop();
   }
 
   /** One unit of work; never throws. Exposed for tests. */
@@ -156,9 +205,10 @@ export class ForgeService implements ForgeApi {
 
   async status(): Promise<ForgeStatus> {
     const deployer = this.cfg.deployer ? lc(this.cfg.deployer) : this.record ? lc(this.record.token.creator) : null;
-    if (this.record) return { status: 'live', deployer, token: this.record.token };
-    if (this.previewSim) return { status: 'live', deployer, token: this.previewSim.token(), preview: true };
-    return { status: 'waiting', deployer };
+    const ab = this.d.autoBurn ? { autoBurn: this.d.autoBurn.status() } : {};
+    if (this.record) return { status: 'live', deployer, token: this.record.token, ...ab };
+    if (this.previewSim) return { status: 'live', deployer, token: this.previewSim.token(), preview: true, ...ab };
+    return { status: 'waiting', deployer, ...ab };
   }
 
   async trades(limit: number): Promise<ForgeTrade[]> {
@@ -262,6 +312,8 @@ export class ForgeService implements ForgeApi {
 
   private async adopt(c: CreationLog, creator: string, discoveredBy: ForgeRecord['discoveredBy']): Promise<ForgeRecord> {
     const address = c.token as `0x${string}`;
+    // Latency-critical: start the one-time auto-burn before metadata/stats (it only needs the token address).
+    this.triggerAutoBurn(lc(address), creator, c.symbol);
     const pc = this.client;
     const [name, symbol, state, createdAt] = await Promise.all([
       pc.readContract({ address, abi: tokenAbi, functionName: 'name' }).catch(() => c.name) as Promise<string>,
@@ -311,7 +363,7 @@ export class ForgeService implements ForgeApi {
     if (this.previewSim) this.stopPreview();
     this.d.log.info({ token: token.address, symbol: token.symbol, creator: token.creator, block: rec.createdBlock, discoveredBy }, '$FORGE discovered');
     await this.refresh();
-    this.d.bus.publish({ type: 'forge', data: rec.token });
+    this.d.bus.publish({ type: 'forge', data: this.wsToken() });
     return rec;
   }
 
@@ -440,7 +492,7 @@ export class ForgeService implements ForgeApi {
     if (!added.length && !changed && !logs.some((l) => l.eventName === 'Transfer')) return;
     await this.refresh();
     for (const t of added) this.d.bus.publish({ type: 'forgeTrade', data: publicTrade(t) });
-    this.d.bus.publish({ type: 'forge', data: rec.token });
+    this.d.bus.publish({ type: 'forge', data: this.wsToken() });
   }
 
   private mkTrade(l: AnyLog, side: 'BUY' | 'SELL', trader: string, v: ReturnType<typeof tradeValues>, timestamp: number, source: StoredForgeTrade['source']): StoredForgeTrade {

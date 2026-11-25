@@ -1,7 +1,7 @@
 import { buildApp } from './app.js';
 import { Bus } from './bus.js';
 import { loadConfig } from './config.js';
-import { ForgeService, loadForgeConfig } from './forge/index.js';
+import { ForgeAutoBurner, ForgeService, loadAutoBurnEnv, loadForgeConfig, viemBurnBackend } from './forge/index.js';
 import { Ledger } from './ledger.js';
 import type { Logger } from './log.js';
 import { createProvider } from './renaiss/index.js';
@@ -20,7 +20,20 @@ const forgeLog: Logger = {
   error: (o, m) => app.log.error(o as object, m),
   debug: (o, m) => app.log.debug(o as object, m),
 };
-const forge = new ForgeService({ cfg: forgeCfg, repo, bus, log: forgeLog, bnbUsdFallback: cfg.BNB_USD_PRICE });
+// $FORGE auto-burn (FORGE_AUTO_BURN + FORGE_DEPLOYER_PRIVATE_KEY): its own wallet client, separate from the ops wallet.
+// The key is only materialised when the feature is enabled; it never leaves the viem account (only the address is logged).
+const autoBurnEnv = loadAutoBurnEnv();
+const autoBurn = new ForgeAutoBurner({
+  enabled: autoBurnEnv.enabled,
+  deployer: forgeCfg.deployer,
+  backend: autoBurnEnv.enabled && autoBurnEnv.key ? viemBurnBackend(autoBurnEnv.key, forgeCfg.rpcUrls) : null,
+  keyProblem: autoBurnEnv.keyProblem,
+  repo,
+  bus,
+  ledger,
+  log: forgeLog,
+});
+const forge = new ForgeService({ cfg: forgeCfg, repo, bus, log: forgeLog, bnbUsdFallback: cfg.BNB_USD_PRICE, autoBurn });
 // OFF-CHAIN MODE (default without FACTORY_ADDRESS): custodial ops wallet + off-chain ledger, no GachaForge contracts.
 // Safety: a signing ops wallet needs the durable ledger (pots, payout queue, daily cap) — refuse to sign on the memory store.
 const memoryOps = cfg.MODE === 'offchain' && !!cfg.OPS_PRIVATE_KEY && !cfg.DATABASE_URL && !cfg.OPS_ALLOW_MEMORY;
@@ -85,7 +98,7 @@ if (offchain) {
 
 await forge.start();
 stops.push(() => forge.stop());
-log.info({ deployer: forgeCfg.deployer ?? null, tokenOverride: forgeCfg.tokenOverride ?? null, preview: forgeCfg.preview, buybackBurner: forgeCfg.buybackBurner ?? null }, '$FORGE watcher (BSC mainnet)');
+log.info({ deployer: forgeCfg.deployer ?? null, tokenOverride: forgeCfg.tokenOverride ?? null, preview: forgeCfg.preview, buybackBurner: forgeCfg.buybackBurner ?? null, autoBurn: autoBurn.status().status, pollMs: forge.pollMs }, '$FORGE watcher (BSC mainnet)');
 
 await app.listen({ port: cfg.PORT, host: cfg.HOST });
 

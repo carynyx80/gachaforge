@@ -5,7 +5,7 @@ import { PageLoading } from '../PageLoading';
 import { ForgeChart } from './ForgeChart';
 import { ForgeComing } from './ForgeComing';
 import { ForgeFuel } from './ForgeFuel';
-import { ForgeHeader, ForgeStats, ForgeTrades } from './ForgeLive';
+import { ForgeAutoBurnCard, ForgeHeader, ForgeStats, ForgeTrades } from './ForgeLive';
 import { ForgeTradeBar } from './ForgeTradeBar';
 import { useForge, useForgeT } from './useForge';
 
@@ -39,6 +39,7 @@ export function ForgePage() {
           </div>
         )}
         <ForgeHeader token={token} preview={preview} />
+        <ForgeAutoBurnCard autoBurn={state.autoBurn} />
         <ForgeStats token={token} />
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <ForgeChart subscribeTrades={subscribeTrades} fixture={fixture === 'preview'} />

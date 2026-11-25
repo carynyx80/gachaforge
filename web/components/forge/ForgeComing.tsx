@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { fetchFeeSummary } from '@/lib/fees';
 import { addrUrl } from '@/lib/chain';
 import { short } from '@/lib/format';
-import { bnbFmt, type ForgeState } from '@/lib/forge';
+import { GF_X_URL, bnbFmt, type ForgeState } from '@/lib/forge';
+import { LogoMark } from '../Logo';
 import type { ForgeKey } from '@/lib/forge-i18n';
 import { useTween } from '../live/AnimatedNumber';
 import { useForgeT } from './useForge';
@@ -40,6 +41,13 @@ export function ForgeComing({ state }: { state: ForgeState | null }) {
           <span className="inline-flex items-center gap-2 rounded-sm border-2 border-fg/80 bg-fg px-3 py-1 font-display text-xs font-extrabold uppercase tracking-wide text-black">
             {t('coming_flap')} ↗
           </span>
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-5 sm:gap-7">
+          <LogoMark size={128} className="h-20 w-20 shrink-0 rounded-[18px] shadow-[6px_6px_0_0_var(--fg)] sm:h-32 sm:w-32" />
+          <a href={GF_X_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border-2 border-fg bg-bg px-4 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide text-fg transition hover:border-accent hover:text-accent hover:shadow-[4px_4px_0_0_var(--accent)]">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+            {t('follow_x')}
+          </a>
         </div>
         <h1 className="mt-6 font-display font-black uppercase">
           <span className="neon-text block text-[clamp(3.4rem,15vw,10rem)] leading-[0.9] tracking-[-0.04em] text-accent">{t('coming_title_1')}</span>

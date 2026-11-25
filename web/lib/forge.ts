@@ -14,8 +14,16 @@ export interface ForgeToken {
   /** Set by the backend when FORGE_PREVIEW=true (flagged sample token). */
   preview?: boolean;
 }
+/** Backend auto-burn of the deployer's supply (optional; older backends omit it). */
+export interface ForgeAutoBurn {
+  enabled: boolean;
+  status: 'idle' | 'waiting' | 'done' | 'nothing' | 'error';
+  txHash?: string;
+  amount?: number | string;
+}
 export interface ForgeState {
   status: 'waiting' | 'live';
+  autoBurn?: ForgeAutoBurn;
   deployer?: string;
   token?: ForgeToken;
   preview?: boolean;
@@ -35,6 +43,14 @@ export const FORGE_SUPPLY = 1_000_000_000;
 export const DEAD = '0x000000000000000000000000000000000000dEaD';
 export const flapTokenUrl = (a: string) => `https://flap.sh/bnb/${a}`;
 export const pancakeUrl = (a: string) => `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${a}`;
+export const GF_X_URL = 'https://x.com/Gachaforge';
+export const GF_WEBSITE_URL = 'https://gachaforge.xyz';
+/** Token links with GachaForge fallbacks for anything flap.sh metadata lacks. */
+export const forgeLinks = (t?: ForgeToken) => ({
+  x: t?.links?.x || GF_X_URL,
+  website: t?.links?.website || GF_WEBSITE_URL,
+  telegram: t?.links?.telegram,
+});
 export const isPreview = (s?: ForgeState | null) => !!(s?.preview || s?.token?.preview);
 
 async function tryGet<T>(path: string): Promise<T | null> {
@@ -96,10 +112,11 @@ export function fixtureState(kind: 'preview' | 'waiting', now = Math.floor(Date.
   if (kind === 'waiting') return { status: 'waiting', deployer: '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c', buybackPendingBnb: 1.8432, buybackTotalBnb: 0 };
   return {
     status: 'live', deployer: '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c', preview: true,
+    autoBurn: { enabled: true, status: 'done', amount: 48_200_000, txHash: '0x' + 'b2'.repeat(32) },
     token: {
       address: '0xf0f9e5c3a1b2d4e6f8a0c2e4b6d8f0a2c4e67777', name: 'GachaForge', symbol: 'FORGE',
       description: 'The GachaForge platform token. 3% of every machine tax buys it back and burns it.',
-      links: { website: 'https://gachaforge.xyz', x: 'https://x.com/gachaforge', telegram: 'https://t.me/gachaforge' },
+      links: { telegram: 'https://t.me/gachaforge' },
       creator: '0x49060cd4C7679e7F6dB1075027F121a7c9F97a7c', createdAt: now - 3 * 86400, createdTx: '0x' + 'a1'.repeat(32),
       stage: 'CURVE', bondingCurvePct: 63.4,
       priceUsd: 0.00004182, priceBnb: 0.0000000672, marketCapUsd: 41_820, change24hPct: 18.7, volume24hUsd: 96_400,

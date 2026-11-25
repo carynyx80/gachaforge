@@ -1,3 +1,4 @@
+import type { AutoBurnStatus } from './autoburn.js';
 // $FORGE token page data model — mirrors SPEC.md "$FORGE token page". `preview` is additive.
 
 export interface ForgeToken {
@@ -31,6 +32,8 @@ export interface ForgeToken {
   buybackTotalBnb: number;
   /** true = simulated token served because FORGE_PREVIEW=true and nothing was discovered yet */
   preview?: boolean;
+  /** WS `forge` messages only: current $FORGE auto-burn state (not persisted with the token). */
+  autoBurn?: AutoBurnStatus;
 }
 
 export interface ForgeTrade {
@@ -70,6 +73,8 @@ export interface ForgeStatus {
   token?: ForgeToken;
   /** Present (true) only when the token is the FORGE_PREVIEW simulation. */
   preview?: boolean;
+  /** FORGE_AUTO_BURN state (present whenever the auto-burner is wired, i.e. always in production). */
+  autoBurn?: AutoBurnStatus;
 }
 
 /** What the backend persists once $FORGE is found (token snapshot + indexing internals). */

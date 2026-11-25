@@ -154,6 +154,26 @@ A failed dividend payout stays in the payout queue. A failed burn or buyback lea
 ### Tax not arriving / alerts
 `GET /api/alerts` lists flap.sh admin re-routes (`TaxTokenAddressesUpdated`). `ledger.treasuryShareBps` falling well below about 9000 means tax is being lost; check the token on flap.sh.
 
+## $FORGE auto-burn
+Optional and off by default. The owner launches $FORGE by hand on flap.sh from `FORGE_DEPLOYER`, usually with an initial buy. With auto-burn on, the backend sends the deployer's **whole** $FORGE balance to `0x…dEaD` as soon as the token is discovered, exactly once.
+
+- **Env vars:**
+  - `FORGE_AUTO_BURN=true` turns it on.
+  - `FORGE_DEPLOYER_PRIVATE_KEY` is the deployer's key. Set it as a sealed Railway variable only.
+- **Key check.** If the key's address is not `FORGE_DEPLOYER` (case-insensitive), or the key is missing or malformed, the backend logs an error and never signs. Only the address is ever logged.
+- **What the key can do.** The key gets its own viem wallet client, separate from the ops wallet. Its only signing path builds `token.transfer(0x…dEaD, fullBalance)` with value 0, and a guard rejects anything else: no other method and no BNB transfer. It only burns a token whose creator (or creation `tx.from`) is `FORGE_DEPLOYER`. A `FORGE_TOKEN_ADDRESS` that someone else created is never burned.
+- **Speed.** While auto-burn is armed and $FORGE is not yet found, discovery polls every 1.5 s instead of `FORGE_POLL_MS`. The burn starts as soon as the `TokenCreated` log is matched, before metadata and stats load. On the 1 s-block fork the burn landed in the block right after the launch, about 2 s after detection.
+- **Exactly once.** State is kept in the `meta` row `forge:autoburn` (Postgres). The signed tx and its hash are saved *before* broadcast. After a restart the backend re-checks or re-broadcasts that same tx (same nonce) and does not sign a new one. `done` and `nothing` are final. `error` (non-transient failure, or no gas for 1 h) is retried on the next restart.
+- **Retries.**
+  - RPC errors: up to 5 retries with exponential backoff.
+  - Not enough BNB for gas: the backend logs `INSUFFICIENT BNB FOR GAS` and checks again every 30 s for up to 1 h. Keep about 0.001 BNB on the deployer after the launch.
+- **Balance of 0.** The backend records `nothing` ("nothing to burn") and stops.
+- **Visibility.**
+  - `GET /api/forge` returns `autoBurn: { enabled, status: 'idle'|'waiting'|'done'|'nothing'|'error', txHash?, amount?, detail? }`.
+  - On success the backend adds a `BURN` record (`/api/burns`, id `autoburn-<tx>`) and a `BURN` activity event, and broadcasts a WS `forge` update with `autoBurn`.
+- **If $FORGE was already discovered** when you turn auto-burn on, the burn runs at the next start.
+- **Tax.** A plain wallet → `0x…dEaD` transfer of a flap.sh Tax Token V3 is **not taxed or blocked**. This was checked on a BSC fork in three phases: on the curve (`state()=0`), right after graduation inside the 3-day anti-farmer window (`state()=2`), and 4 days later. In each phase the dead address received exactly the amount sent, with a single `Transfer` and no tax-processor or contract transfer. Tax and the anti-farmer rule only apply to pool transfers.
+
 ## Trust assumptions (disclose to users)
 - **Custodial.** Pots are ledger entries, not on-chain balances. The ops wallet key holder can move the funds. Every tx is public on `/transparency`.
 - **flap.sh admins can re-route** a token's tax recipient (`updateTaxTokenAddresses`). This is monitored, not prevented.
@@ -168,5 +188,7 @@ A failed dividend payout stays in the payout queue. A failed burn or buyback lea
   4. checks that treasury receipts equal the reconciled ledger;
   5. runs a pot-full pull with a real PancakeSwap swap and a mocked Renaiss;
   6. runs a Portal buy & burn.
+
+- `BSC_RPC_URL=… npx vitest run test/forge.autoburn.fork.test.ts` forks BSC (1 s blocks). An anvil account acting as the deployer launches a token via `newTokenV6` with an initial buy. The real `ForgeService` discovers it and auto-burns it. The test asserts dead balance == bought amount, deployer balance == 0, and no repeat after a restart. It also logs detection→burn latency.
 
   On BSC mainnet the well-known anvil addresses carry EIP-7702 sweeper delegations, so the test clears their code on the fork first.
