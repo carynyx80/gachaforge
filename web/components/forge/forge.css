@@ -1,0 +1,17 @@
+/* $FORGE page */
+.forge-pipe { position: relative; background: repeating-linear-gradient(90deg, #B6FF2E66 0 6px, transparent 6px 14px); background-size: 28px 100%; animation: forge-pipe 0.9s linear infinite; }
+.forge-pipe-v { position: relative; background: repeating-linear-gradient(180deg, #B6FF2E66 0 6px, transparent 6px 14px); background-size: 100% 28px; animation: forge-pipe-v 0.9s linear infinite; }
+@keyframes forge-pipe { to { background-position: 28px 0; } }
+@keyframes forge-pipe-v { to { background-position: 0 28px; } }
+.forge-orb { position: absolute; top: 50%; left: 0; width: 8px; height: 8px; margin-top: -4px; border-radius: 9999px; background: var(--glow); box-shadow: 0 0 10px var(--accent); animation: forge-orb 2.4s linear infinite; }
+.forge-pipe-v .forge-orb { top: 0; left: 50%; margin: 0 0 0 -4px; animation-name: forge-orb-v; }
+@keyframes forge-orb { from { left: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } to { left: calc(100% - 8px); opacity: 0; } }
+@keyframes forge-orb-v { from { top: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } to { top: calc(100% - 8px); opacity: 0; } }
+.forge-flame { display: inline-block; animation: forge-flame 1.1s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes forge-flame { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.12) rotate(3deg); filter: drop-shadow(0 0 10px #ff8a00); } }
+.forge-scan { background: linear-gradient(180deg, transparent, #B6FF2E14 50%, transparent); background-size: 100% 300%; animation: forge-scan 5s linear infinite; }
+@keyframes forge-scan { from { background-position: 0 100%; } to { background-position: 0 -200%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-pipe, .forge-pipe-v, .forge-orb, .forge-flame, .forge-scan { animation: none !important; }
+}

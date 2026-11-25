@@ -10,7 +10,7 @@ const NAV: { href: string; k: DictKey }[] = [
   { href: '/#board', k: 'nav_board' },
   { href: '/launch', k: 'nav_launch' },
   { href: '/#pulls', k: 'nav_pulls' },
-  { href: '/buyback-burn', k: 'nav_burn' },
+  { href: '/forge', k: 'nav_forge' },
   { href: '/docs', k: 'nav_docs' },
 ];
 
@@ -23,7 +23,7 @@ export function Header() {
         <Link href="/" aria-label="GachaForge home" className="min-w-0 shrink-0"><Wordmark /></Link>
         <nav className="ml-6 hidden items-center gap-1 lg:flex">
           {NAV.map((n) => (
-            <Link key={n.k} href={n.href} className="rounded-md px-3 py-2 font-display text-sm font-semibold uppercase tracking-wide text-muted transition hover:bg-surface hover:text-fg">
+            <Link key={n.k} href={n.href} className={`rounded-md px-3 py-2 font-display text-sm font-semibold uppercase tracking-wide transition hover:bg-surface hover:text-fg ${n.k === 'nav_forge' ? 'text-accent' : 'text-muted'}`}>
               {t(n.k)}
             </Link>
           ))}
@@ -48,7 +48,7 @@ export function Header() {
       {open && (
         <nav className="border-t border-line px-4 py-2 lg:hidden">
           {NAV.map((n) => (
-            <Link key={n.k} href={n.href} onClick={() => setOpen(false)} className="block py-2 font-display font-semibold uppercase tracking-wide text-muted hover:text-fg">{t(n.k)}</Link>
+            <Link key={n.k} href={n.href} onClick={() => setOpen(false)} className={`block py-2 font-display font-semibold uppercase tracking-wide hover:text-fg ${n.k === 'nav_forge' ? 'text-accent' : 'text-muted'}`}>{t(n.k)}</Link>
           ))}
           <div className="mt-1 flex gap-2 border-t border-line py-2 sm:hidden">
             {(['en', 'zh'] as const).map((l) => (

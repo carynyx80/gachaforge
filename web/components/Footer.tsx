@@ -15,7 +15,7 @@ export function Footer() {
         <div className="flex flex-col gap-2 text-sm text-muted">
           <a href="/#board" className="hover:text-fg">{t('nav_board')}</a>
           <a href="/launch" className="hover:text-fg">{t('nav_launch')}</a>
-          <a href="/buyback-burn" className="hover:text-fg">{t('nav_burn')}</a>
+          <a href="/forge" className="hover:text-fg">{t('nav_forge')}</a>
         </div>
         <div className="flex flex-col gap-2 text-sm text-muted">
           <a href="/docs" className="hover:text-fg">{t('nav_docs')}</a>

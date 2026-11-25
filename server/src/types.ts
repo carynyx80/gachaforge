@@ -1,3 +1,5 @@
+import type { ForgeToken, ForgeTrade } from './forge/types.js';
+
 // Shared data model — mirrors SPEC.md exactly. Do not change shapes without updating SPEC.
 export type Strategy = 'RAFFLE' | 'HIT_HUNTER' | 'DIVIDEND' | 'BURN' | 'SPLIT';
 export type PackId = 'FORGE_28' | 'FORGE_48' | 'FORGE_88';
@@ -183,7 +185,9 @@ export type WsMessage =
   | { type: 'fee'; data: FeeEvent }
   | { type: 'pull'; data: Pull }
   | { type: 'stats'; data: Stats }
-  | { type: 'machine'; data: Machine };
+  | { type: 'machine'; data: Machine }
+  | { type: 'forge'; data: ForgeToken }
+  | { type: 'forgeTrade'; data: ForgeTrade };
 
 /** A raffled card waiting for the provider to release it (end of the buyback window) before we forward it. */
 export type CardReleaseStatus = 'PENDING' | 'DELIVERED' | 'FAILED';

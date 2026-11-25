@@ -1,3 +1,4 @@
+import type { ForgeRecord, StoredForgeTrade } from '../forge/types.js';
 import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeSummary, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 
 export interface HolderRow {
@@ -71,6 +72,16 @@ export interface Repository {
   /** PENDING rows with nextAttemptAt <= now, oldest releaseAt first. */
   listDueCardReleases(now: number, limit: number): Promise<CardRelease[]>;
   listCardReleases(opts?: { status?: CardRelease['status']; winner?: string }): Promise<CardRelease[]>;
+
+  /** $FORGE (SPEC "$FORGE token page"): the single discovered token, latest saved wins. */
+  getForgeRecord(): Promise<ForgeRecord | null>;
+  saveForgeRecord(r: ForgeRecord): Promise<void>;
+  /** Returns false when a trade with the same id already exists. */
+  addForgeTrade(token: string, t: StoredForgeTrade): Promise<boolean>;
+  /** Newest first; `since` = timestamp >= since. */
+  listForgeTrades(token: string, opts: { limit: number; since?: number }): Promise<StoredForgeTrade[]>;
+  /** Newest trade with timestamp < ts. */
+  lastForgeTradeBefore(token: string, ts: number): Promise<StoredForgeTrade | null>;
 
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;

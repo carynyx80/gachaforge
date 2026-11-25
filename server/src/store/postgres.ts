@@ -1,10 +1,11 @@
-import { and, asc, count, desc, eq, gte, gt, lte, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, gt, lt, lte, sql, sum } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as s from '../db/schema.js';
+import type { ForgeRecord, StoredForgeTrade } from '../forge/types.js';
 import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeTotals, Machine, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type Repository } from './repository.js';
 
@@ -269,6 +270,44 @@ export class PostgresRepository implements Repository {
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(asc(s.cardReleases.releaseAt));
     return r.map(releaseRow);
+  }
+
+  async getForgeRecord() {
+    const r = await this.db.select().from(s.forgeToken).orderBy(desc(s.forgeToken.updatedAt)).limit(1);
+    return r[0]?.data ?? null;
+  }
+  async saveForgeRecord(rec: ForgeRecord) {
+    const data = { ...rec, token: { ...rec.token, address: lc(rec.token.address) } };
+    const row = { address: data.token.address, createdBlock: rec.createdBlock, updatedAt: Date.now(), data };
+    await this.db.insert(s.forgeToken).values(row).onConflictDoUpdate({ target: s.forgeToken.address, set: { data, createdBlock: row.createdBlock, updatedAt: row.updatedAt } });
+  }
+  async addForgeTrade(token: string, t: StoredForgeTrade) {
+    const data = { ...t, trader: lc(t.trader) };
+    const r = await this.db
+      .insert(s.forgeTrades)
+      .values({ token: lc(token), id: t.id, timestamp: t.timestamp, blockNumber: t.blockNumber, logIndex: t.logIndex, data })
+      .onConflictDoNothing()
+      .returning({ id: s.forgeTrades.id });
+    return r.length > 0;
+  }
+  async listForgeTrades(token: string, { limit, since }: { limit: number; since?: number }) {
+    const where = since === undefined ? eq(s.forgeTrades.token, lc(token)) : and(eq(s.forgeTrades.token, lc(token)), gte(s.forgeTrades.timestamp, since));
+    const r = await this.db
+      .select()
+      .from(s.forgeTrades)
+      .where(where)
+      .orderBy(desc(s.forgeTrades.timestamp), desc(s.forgeTrades.blockNumber), desc(s.forgeTrades.logIndex))
+      .limit(limit);
+    return r.map((x) => x.data);
+  }
+  async lastForgeTradeBefore(token: string, ts: number) {
+    const r = await this.db
+      .select()
+      .from(s.forgeTrades)
+      .where(and(eq(s.forgeTrades.token, lc(token)), lt(s.forgeTrades.timestamp, ts)))
+      .orderBy(desc(s.forgeTrades.timestamp), desc(s.forgeTrades.blockNumber), desc(s.forgeTrades.logIndex))
+      .limit(1);
+    return r[0]?.data ?? null;
   }
 
   async getMeta(key: string) {

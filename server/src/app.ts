@@ -1,10 +1,12 @@
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { registerForgeRoutes } from './api/forge.js';
 import { registerRoutes } from './api/routes.js';
 import { registerWs } from './api/ws.js';
 import type { Bus } from './bus.js';
 import { VERCEL_PREVIEW_ORIGIN, VERSION } from './config.js';
+import type { ForgeApi } from './forge/service.js';
 import type { Ledger } from './ledger.js';
 
 export interface HealthInfo {
@@ -28,6 +30,8 @@ export async function buildApp(opts: {
   excluded?: string[];
   logger?: boolean | object;
   health?: Partial<HealthInfo>;
+  /** $FORGE watcher; omitted → GET /api/forge reports { status: 'waiting', deployer: null }. */
+  forge?: ForgeApi;
 }): Promise<FastifyInstance> {
   // trustProxy: Railway terminates TLS and forwards via its edge proxy.
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true });
@@ -40,6 +44,7 @@ export async function buildApp(opts: {
   await registerWs(app, { bus: opts.bus, ledger: opts.ledger });
   const health: HealthInfo = { mode: 'mock', chainId: 97, version: VERSION, treasury: '', ...opts.health };
   await registerRoutes(app, { ledger: opts.ledger, excluded: opts.excluded ?? [], health });
+  await registerForgeRoutes(app, opts.forge);
   app.setNotFoundHandler((req, reply) => reply.code(404).send({ error: 'not_found', message: `${req.method} ${req.url}` }));
   return app;
 }

@@ -282,7 +282,7 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
           <H id="forge" n={8}>{d.nav.forge}</H>
           <div className="panel space-y-3 p-5 text-sm">
             <p>{d.forge.p1}</p><p className="text-muted">{d.forge.p2}</p><p className="text-muted">{d.forge.p3}</p>
-            <a href="/buyback-burn" className="inline-block text-accent hover:underline">{d.forge.link} →</a>
+            <a href="/forge" className="inline-block text-accent hover:underline">{d.forge.link} →</a>
           </div>
         </section>
 

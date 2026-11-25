@@ -1,3 +1,4 @@
+import type { ForgeRecord, StoredForgeTrade } from '../forge/types.js';
 import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeTotals, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type HolderRow, type Repository, type RewardsRow } from './repository.js';
 
@@ -42,6 +43,9 @@ export class MemoryRepository implements Repository {
   private meta = new Map<string, string>();
   private counters = new Map<string, number>();
   private releases = new Map<string, CardRelease>();
+  private forgeRecord: ForgeRecord | null = null;
+  private forgeTrades = new Map<string, StoredForgeTrade[]>();
+  private forgeTradeIds = new Set<string>();
 
   async init() {}
   async close() {}
@@ -231,6 +235,35 @@ export class MemoryRepository implements Repository {
       .filter((r) => (!opts.status || r.status === opts.status) && (!opts.winner || r.winner === lc(opts.winner)))
       .sort((a, b) => a.releaseAt - b.releaseAt)
       .map((r) => ({ ...r }));
+  }
+
+  async getForgeRecord() {
+    return this.forgeRecord ? structuredClone(this.forgeRecord) : null;
+  }
+  async saveForgeRecord(r: ForgeRecord) {
+    this.forgeRecord = structuredClone({ ...r, token: { ...r.token, address: lc(r.token.address) } });
+  }
+  async addForgeTrade(token: string, t: StoredForgeTrade) {
+    const key = `${lc(token)}|${t.id}`;
+    if (this.forgeTradeIds.has(key)) return false;
+    this.forgeTradeIds.add(key);
+    const list = this.forgeTrades.get(lc(token)) ?? [];
+    list.push({ ...t, trader: lc(t.trader) });
+    this.forgeTrades.set(lc(token), list);
+    return true;
+  }
+  private forgeSorted(token: string) {
+    return [...(this.forgeTrades.get(lc(token)) ?? [])].sort((a, b) => b.timestamp - a.timestamp || b.blockNumber - a.blockNumber || b.logIndex - a.logIndex);
+  }
+  async listForgeTrades(token: string, { limit, since }: { limit: number; since?: number }) {
+    return this.forgeSorted(token)
+      .filter((t) => since === undefined || t.timestamp >= since)
+      .slice(0, limit)
+      .map((t) => ({ ...t }));
+  }
+  async lastForgeTradeBefore(token: string, ts: number) {
+    const t = this.forgeSorted(token).find((x) => x.timestamp < ts);
+    return t ? { ...t } : null;
   }
 
   async getMeta(key: string) {

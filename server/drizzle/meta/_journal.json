@@ -22,6 +22,13 @@
       "when": 1795630688728,
       "tag": "0002_fee_events",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795632705250,
+      "tag": "0003_forge",
+      "breakpoints": true
     }
   ]
 }

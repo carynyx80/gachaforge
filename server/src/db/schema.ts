@@ -1,4 +1,5 @@
 import { bigint, boolean, doublePrecision, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text } from 'drizzle-orm/pg-core';
+import type { ForgeRecord, StoredForgeTrade } from '../forge/types.js';
 import type { ActivityEvent, BurnEvent, CardReleaseStatus, FeeEvent, Machine, Pull, RaffleProof, Trade } from '../types.js';
 
 export const machines = pgTable('machines', {
@@ -136,4 +137,25 @@ export const feeEvents = pgTable(
     data: jsonb('data').$type<FeeEvent>().notNull(),
   },
   (t) => [index('fee_events_ts_idx').on(t.timestamp), index('fee_events_machine_ts_idx').on(t.machine, t.timestamp), index('fee_events_machine_pending_idx').on(t.machine, t.pending)],
+);
+
+/** $FORGE (SPEC "$FORGE token page"): discovered once, then only updated. */
+export const forgeToken = pgTable('forge_token', {
+  address: text('address').primaryKey(),
+  createdBlock: bigint('created_block', { mode: 'number' }).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
+  data: jsonb('data').$type<ForgeRecord>().notNull(),
+});
+
+export const forgeTrades = pgTable(
+  'forge_trades',
+  {
+    token: text('token').notNull(),
+    id: text('id').notNull(),
+    timestamp: bigint('timestamp', { mode: 'number' }).notNull(),
+    blockNumber: bigint('block_number', { mode: 'number' }).notNull(),
+    logIndex: integer('log_index').notNull(),
+    data: jsonb('data').$type<StoredForgeTrade>().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.token, t.id] }), index('forge_trades_token_ts_idx').on(t.token, t.timestamp)],
 );

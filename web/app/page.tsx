@@ -9,6 +9,7 @@ import { Board } from '@/components/Board';
 import { LiveRefresh } from '@/components/LiveRefresh';
 import { FeeFlow } from '@/components/live/FeeFlow';
 import { PageLoading } from '@/components/PageLoading';
+import { ForgeBanner } from '@/components/forge/ForgeBanner';
 
 async function HomeData() {
   const [stats, activity, pulls, rip, machines] = await Promise.all([
@@ -32,6 +33,7 @@ export default function Home() {
   return (
     <>
       <LiveRefresh />
+      <ForgeBanner />
       <Hero />
       <Suspense fallback={<PageLoading label="Loading machines…" />}>
         <HomeData />

@@ -113,3 +113,24 @@ interface FeeEvent {
 ```
 `GET /api/fees/summary` → `{ totalTaxUsd, flapUsd, platformUsd, potUsd, buybackUsd, last24h: { same fields } }`.
 In live mode these are computed from indexed flap trades (amount × 2%, split by the constants) and reconciled with the vault's TaxReceived events (pending → false). In mock mode the simulator emits them.
+
+## $FORGE token page (added)
+$FORGE is created by the owner DIRECTLY on flap.sh (not via our factory). The backend auto-discovers it: it watches the flap.sh Portal on BSC mainnet (always real chain, independent of MOCK_MODE) for the first token whose creator == `FORGE_DEPLOYER` (env, public address). Optional override `FORGE_TOKEN_ADDRESS`. Once found it is persisted and never re-discovered.
+- `GET /api/forge` → `{ status: 'waiting'|'live', deployer, token?: ForgeToken }`
+- `GET /api/forge/trades?limit=` → recent flap trades of $FORGE `{ side, trader, amountBnb, tokens, priceUsd, txHash, timestamp }[]`
+- `GET /api/forge/candles?interval=1m|5m|15m|1h|4h|1d` → `{ t, o, h, l, c, v }[]` (USD) built from indexed trades
+- WS `/ws`: `{ type: 'forge', data: ForgeToken }` on discovery and on every trade; `{ type: 'forgeTrade', data: trade }`.
+```ts
+interface ForgeToken {
+  address: string; name: string; symbol: string; image?: string; description?: string;
+  links?: { website?: string; x?: string; telegram?: string };
+  creator: string; createdAt: number; createdTx: string;
+  stage: 'CURVE'|'GRADUATED'; bondingCurvePct: number; pool?: string; // PancakeSwap pair after graduation
+  priceUsd: number; priceBnb: number; marketCapUsd: number; change24hPct: number; volume24hUsd: number;
+  holders: number; buyTaxBps: number; sellTaxBps: number; taxRecipient?: string;
+  burnedTokens: number;            // $FORGE sent to dead address (by our BuybackBurner or anyone)
+  buybackPendingBnb: number;       // BNB waiting in BuybackBurner (3% share of machine taxes)
+  buybackTotalBnb: number;         // BNB spent buying back $FORGE so far
+}
+```
+Frontend page: `/forge` (nav label "$FORGE"); trading via flap Portal `swapExactInput`/`quoteExactInput` (works pre- and post-graduation), enabled as soon as the token is live (does NOT depend on our factory being deployed).
