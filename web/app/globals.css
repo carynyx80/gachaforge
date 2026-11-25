@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #050505;
+  --surface: #0E0F0C;
+  --line: #1F2419;
+  --fg: #F4F7EE;
+  --muted: #8E9686;
+  --accent: #B6FF2E;
+  --accent-soft: #B6FF2E26;
+  --glow: #D4FF7A;
+  --success: #3DDC97;
+  --danger: #FF4D4D;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-glow: var(--glow);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-chakra), var(--font-inter), sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, monospace;
+}
+
+html { color-scheme: dark; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.btn-chunky {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  background: var(--accent); color: #050505;
+  font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  border: 2px solid #050505; border-radius: 8px;
+  box-shadow: 4px 4px 0 0 var(--fg);
+  transition: transform .12s, box-shadow .12s;
+}
+.btn-chunky:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 0 var(--fg); }
+.btn-chunky:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 0 var(--fg); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--line); border-radius: 8px; color: var(--fg);
+  font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  transition: border-color .15s, box-shadow .15s;
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent); box-shadow: 4px 4px 0 0 var(--accent); }
+
+.neon-text { text-shadow: 0 0 18px #B6FF2Eaa, 0 0 42px #B6FF2E55; }
+
+/* Hero background */
+.hero-sky {
+  background:
+    radial-gradient(ellipse 60% 50% at 70% 35%, #B6FF2E33, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 10% 0%, #7CFF6B22, transparent 70%);
+}
+.grid-floor {
+  perspective: 380px;
+  mask-image: linear-gradient(to top, #000 30%, transparent);
+  -webkit-mask-image: linear-gradient(to top, #000 30%, transparent);
+}
+.grid-floor::before {
+  content: ""; position: absolute; inset: 0 -50% -40% -50%;
+  background-image:
+    linear-gradient(to right, #B6FF2E80 1px, transparent 1px),
+    linear-gradient(to bottom, #B6FF2E80 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: rotateX(62deg);
+  transform-origin: top center;
+  animation: grid-move 2.4s linear infinite;
+}
+@keyframes grid-move { to { background-position: 0 48px; } }
+
+/* Gacha machine */
+.gm-float { animation: gm-float 5s ease-in-out infinite; filter: drop-shadow(0 0 30px #B6FF2E55); }
+@keyframes gm-float { 50% { transform: translateY(-10px); } }
+.gm-cap { animation: gm-bob 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes gm-bob { 50% { transform: translateY(-3px) rotate(8deg); } }
+.gm-crank { animation: gm-crank 6s ease-in-out infinite; }
+@keyframes gm-crank { 0%, 80% { transform: rotate(0); } 90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
+.gm-blink { animation: gm-blink 1.4s steps(2) infinite; }
+@keyframes gm-blink { 50% { opacity: .35; } }
+
+/* Ticker marquee */
+.marquee { mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.marquee-track { animation: marquee 80s linear infinite; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes marquee { to { transform: translateX(-50%); } }
+
+/* Odometer */
+.odo-digit { display: inline-block; height: 1.15em; overflow: hidden; line-height: 1.15em; }
+.odo-strip { display: flex; flex-direction: column; transition: transform 1.6s cubic-bezier(.2,.8,.2,1); }
+.odo-strip > span { height: 1.15em; }
+
+.rip-bar {
+  background: linear-gradient(90deg, var(--accent), var(--glow));
+  box-shadow: 0 0 12px #B6FF2Eaa;
+  background-size: 200% 100%;
+  animation: rip-shimmer 2s linear infinite;
+}
+@keyframes rip-shimmer { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
