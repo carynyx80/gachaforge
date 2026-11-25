@@ -87,7 +87,7 @@ const schema = z.object({
   AUTO_PUSH_MIN_BNB: z.coerce.number().nonnegative().default(0.05),
   INDEXER_POLL_MS: z.coerce.number().int().positive().default(3000),
   OPERATOR_POLL_MS: z.coerce.number().int().positive().default(5000),
-  SIM_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
+  SIM_INTERVAL_MS: z.coerce.number().int().positive().default(400),
   LOG_LEVEL: z.string().default('info'),
 });
 

@@ -22,7 +22,7 @@ function Odometer({ value }: { value: string }) {
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
-  return <span className="inline-flex font-mono tabular-nums">{value.split('').map((c, i) => <Digit key={i} d={c} ready={ready} />)}</span>;
+  return <span className="inline-flex tabular-nums">{value.split('').map((c, i) => <Digit key={i} d={c} ready={ready} />)}</span>;
 }
 
 export function Scoreboard({ stats }: { stats: Stats }) {
@@ -41,7 +41,7 @@ export function Scoreboard({ stats }: { stats: Stats }) {
         {items.map((it, i) => (
           <div key={it.k} className={`panel p-4 ${i === 0 ? 'col-span-2 md:col-span-1' : ''}`}>
             <div className="text-xs font-semibold uppercase tracking-widest text-muted">{t(it.k)}</div>
-            <div className="mt-2 text-2xl font-bold text-fg sm:text-3xl"><Odometer value={it.v} /></div>
+            <div className="mt-2 font-display text-xl font-extrabold text-fg sm:text-2xl"><Odometer value={it.v} /></div>
           </div>
         ))}
       </div>
@@ -52,8 +52,8 @@ export function Scoreboard({ stats }: { stats: Stats }) {
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
-      <h2 className="flex items-center gap-3 font-display text-2xl font-bold uppercase tracking-wide sm:text-3xl">
-        <span className="h-6 w-1.5 rounded-sm bg-accent shadow-[0_0_12px_#B6FF2E]" />
+      <h2 className="flex items-center gap-3 font-display text-xl font-extrabold uppercase tracking-tight sm:text-[1.65rem]">
+        <span className="h-6 w-1.5 shrink-0 bg-accent shadow-[0_0_12px_#B6FF2E]" />
         {children}
       </h2>
       {right}

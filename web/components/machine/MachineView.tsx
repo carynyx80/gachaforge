@@ -1,11 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
 import type { ActivityEvent, Machine, Pull, Trade } from '@/lib/types';
-import { ago, num, PACK_LABEL, short, usd } from '@/lib/format';
+import { ago, num, short, usd } from '@/lib/format';
 import { STRATEGY_INFO } from '@/lib/strategies';
 import { MachineArt } from '../MachineArt';
 import { CardThumb } from '../CardThumb';
-import { GachaMachine } from '../GachaMachine';
+import { LivePot } from '../live/LivePot';
 import { WinnerCell } from '../RecentPulls';
 import { TradePanel } from './TradePanel';
 import { RewardsPanel } from './RewardsPanel';
@@ -63,7 +63,6 @@ function CopyAddr({ label, value }: { label: string; value: string }) {
 export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls: Pull[]; trades: Trade[]; activity: ActivityEvent[] }) {
   const [tab, setTab] = useState<'pulls' | 'trades' | 'activity'>('pulls');
   const info = STRATEGY_INFO[m.strategy];
-  const pct = Math.min(100, (m.potUsd / m.packPriceUsd) * 100);
   const last = pulls[0];
   const stats = [
     ['Market cap', usd(m.marketCapUsd, true)], ['24h volume', usd(m.volume24hUsd, true)], ['Holders', num(m.holders)],
@@ -76,7 +75,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
         <MachineArt image={m.image} ticker={m.ticker} className="h-20 w-20 shrink-0 rounded-xl ring-2 ring-accent/50" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <h1 className="font-display text-3xl font-bold sm:text-4xl">{m.name}</h1>
+            <h1 className="font-display text-[1.65rem] font-extrabold sm:text-[2.1rem]">{m.name}</h1>
             <span className="font-display text-xl font-bold text-glow">${m.ticker}</span>
           </div>
           <p className="mt-1 text-sm text-muted">{m.description}</p>
@@ -93,7 +92,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
 
       {/* strategy */}
       <div className="panel mt-6 flex flex-col gap-3 border-accent/40 bg-accent-soft/30 p-4 sm:flex-row sm:items-center">
-        <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-3 py-1.5 font-display font-bold uppercase tracking-wider text-black">{info.icon} {info.title}</span>
+        <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-accent px-3 py-1.5 font-display font-bold uppercase tracking-wide text-black">{info.icon} {info.title}</span>
         <p className="text-sm text-fg/90">{info.long}{m.split && ` Ratio: ${m.split.dividendBps / 100}% dividend / ${m.split.burnBps / 100}% burn / ${m.split.lpBps / 100}% LP.`} <span className="text-muted">Tax {m.taxBps / 100}% · locked.</span></p>
       </div>
 
@@ -118,7 +117,7 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
           <div className="panel overflow-hidden">
             <div className="flex border-b border-line">
               {(['pulls', 'trades', 'activity'] as const).map((x) => (
-                <button key={x} onClick={() => setTab(x)} className={`flex-1 py-3 font-display font-semibold uppercase tracking-wider ${tab === x ? 'border-b-2 border-accent text-fg' : 'text-muted'}`}>{x}</button>
+                <button key={x} onClick={() => setTab(x)} className={`flex-1 py-3 font-display font-semibold uppercase tracking-wide ${tab === x ? 'border-b-2 border-accent text-fg' : 'text-muted'}`}>{x}</button>
               ))}
             </div>
             {tab === 'pulls' && pulls.length === 0 && <div className="px-4 py-8 text-center text-sm text-muted">No pulls yet. The first pull opens when the pot reaches the pack price.</div>}
@@ -151,24 +150,14 @@ export function MachineView({ m, pulls, trades, activity }: { m: Machine; pulls:
 
         {/* side column */}
         <div className="flex min-w-0 flex-col gap-6">
-          <div className="panel relative overflow-hidden p-4">
-            <div className="flex items-center gap-4">
-              <GachaMachine className="w-24 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="text-xs uppercase tracking-widest text-muted">Gacha pot · Round #{m.round}</div>
-                <div className="font-mono text-2xl font-bold">{usd(m.potUsd)} <span className="text-base text-muted">/ {usd(m.packPriceUsd)}</span></div>
-                <div className="mt-2 h-3 overflow-hidden rounded-full bg-black/60 ring-1 ring-line"><div className="rip-bar h-full rounded-full" style={{ width: `${pct}%` }} /></div>
-                <div className="mt-1.5 text-sm font-semibold text-accent">{usd(Math.max(0, m.packPriceUsd - m.potUsd))} to rip</div>
-                <div className="text-xs text-muted">{PACK_LABEL[m.pack]}</div>
-              </div>
-            </div>
+          <LivePot m={m}>
             {last && (
               <div className="mt-4 flex items-center gap-3 rounded-lg border border-line bg-bg p-3">
                 <CardThumb card={last.card} size="md" />
                 <div className="min-w-0"><div className="text-[11px] uppercase tracking-widest text-muted">Last card</div><div className="font-semibold">{last.card.name}</div><div className="text-xs text-muted">{last.card.grader} {last.card.grade} · {usd(last.card.valueUsd)}</div><div className="mt-1"><WinnerCell p={last} /></div></div>
               </div>
             )}
-          </div>
+          </LivePot>
 
           <TradePanel m={m} />
 

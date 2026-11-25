@@ -15,6 +15,13 @@
       "when": 1795629141563,
       "tag": "0001_card_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795630688728,
+      "tag": "0002_fee_events",
+      "breakpoints": true
     }
   ]
 }

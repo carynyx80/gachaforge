@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Chakra_Petch, Inter, JetBrains_Mono } from 'next/font/google';
+import { Sora, Space_Mono, Unbounded } from 'next/font/google';
 import './globals.css';
 import { LangProvider } from '@/components/LangProvider';
 import { Header } from '@/components/Header';
@@ -7,9 +7,9 @@ import { Footer } from '@/components/Footer';
 import { PreviewBanner } from '@/components/PreviewBanner';
 import { Web3Providers } from '@/components/wallet/Providers';
 
-const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
-const chakra = Chakra_Petch({ variable: '--font-chakra', subsets: ['latin'], weight: ['500', '600', '700'] });
-const mono = JetBrains_Mono({ variable: '--font-jbmono', subsets: ['latin'] });
+const sora = Sora({ variable: '--font-sora', subsets: ['latin'], weight: ['400', '500', '600'], display: 'swap' });
+const unbounded = Unbounded({ variable: '--font-unbounded', subsets: ['latin'], weight: ['700', '800', '900'], display: 'swap' });
+const mono = Space_Mono({ variable: '--font-spacemono', subsets: ['latin'], weight: ['400', '700'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'GachaForge — Trade memes. Forge real cards.',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${chakra.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sora.variable} ${unbounded.variable} ${mono.variable}`}>
       <body className="flex min-h-screen flex-col">
         <Web3Providers>
           <LangProvider>

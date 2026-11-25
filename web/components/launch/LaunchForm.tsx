@@ -93,7 +93,7 @@ export function LaunchForm() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-10">
-      <h1 className="font-display text-4xl font-bold uppercase sm:text-5xl">Launch a <span className="neon-text text-accent">machine</span></h1>
+      <h1 className="font-display text-3xl font-extrabold uppercase sm:text-[2.6rem]">Launch a <span className="neon-text text-accent">machine</span></h1>
       <p className="mt-2 max-w-2xl text-muted">Your token, your gacha machine. Every setting below is locked forever at launch — choose carefully.</p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">

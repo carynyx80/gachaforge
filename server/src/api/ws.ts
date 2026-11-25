@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Bus } from '../bus.js';
 import type { Ledger } from '../ledger.js';
 
-/** /ws — pushes { type: 'activity'|'pull'|'stats'|'machine', data } to every client. */
+/** /ws — pushes { type: 'activity'|'pull'|'stats'|'machine'|'fee', data } to every client. */
 export async function registerWs(app: FastifyInstance, deps: { bus: Bus; ledger: Ledger }) {
   const clients = new Set<import('ws').WebSocket>();
   const unsub = deps.bus.subscribe((msg) => {

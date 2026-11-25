@@ -94,3 +94,22 @@ web/         Next.js (App Router) + TypeScript + Tailwind + wagmi/viem + Rainbow
 docs/        integration notes (flap.sh, Renaiss)
 ```
 Use **npm** (pnpm is not installed). Secrets only via `.env` (commit `.env.example` only; never write real keys).
+
+## Live fee flow (added)
+Every trade produces a fee event, pushed on WebSocket `/ws` as `{ type: 'fee', data: FeeEvent }` and listed by `GET /api/fees/recent?machine=&limit=`:
+```ts
+interface FeeEvent {
+  id: string; machine: string; ticker: string; side: 'BUY'|'SELL';
+  trader: string; amountBnb: number; txHash: string; timestamp: number;
+  taxUsd: number;        // 2% of the trade
+  flapUsd: number;       // flap.sh's cut (~10% of tax)
+  platformUsd: number;   // 90% of the rest -> company wallet
+  potUsd: number;        // 7% of the rest -> this machine's gacha pot
+  buybackUsd: number;    // 3% of the rest -> $FORGE buyback
+  potAfterUsd: number;   // machine pot incl. this trade (estimate until vault sync)
+  packPriceUsd: number;  // next pack price for this machine
+  pending: boolean;      // true until the tax has been dispatched + synced into the vault on-chain
+}
+```
+`GET /api/fees/summary` → `{ totalTaxUsd, flapUsd, platformUsd, potUsd, buybackUsd, last24h: { same fields } }`.
+In live mode these are computed from indexed flap trades (amount × 2%, split by the constants) and reconciled with the vault's TaxReceived events (pending → false). In mock mode the simulator emits them.

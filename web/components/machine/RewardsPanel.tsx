@@ -73,7 +73,7 @@ export function RewardsPanel({ m }: { m: Machine }) {
         <div className="mt-3 space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-muted">Status</span>
-            <span className={`rounded px-2 py-0.5 font-display text-xs font-bold uppercase tracking-wider ${r.eligible ? 'bg-accent text-black' : 'border border-line text-muted'}`}>{r.eligible ? 'Eligible' : 'Not eligible'}</span>
+            <span className={`rounded px-2 py-0.5 font-display text-xs font-bold uppercase tracking-wide ${r.eligible ? 'bg-accent text-black' : 'border border-line text-muted'}`}>{r.eligible ? 'Eligible' : 'Not eligible'}</span>
           </div>
           <div className="flex justify-between"><span className="text-muted">Your balance</span><span className="font-mono">{num(r.balance)} {m.ticker}</span></div>
           {!r.eligible && <div className="flex justify-between"><span className="text-muted">Needed</span><span className="font-mono">{num(r.minBalance)} {m.ticker}</span></div>}

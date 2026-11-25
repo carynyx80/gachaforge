@@ -31,7 +31,7 @@ export function Board({ machines }: { machines: Machine[] }) {
         <div className="flex gap-1 overflow-x-auto rounded-lg border border-line bg-surface p-1">
           {TABS.map((tb) => (
             <button key={tb.v} onClick={() => reset(setSort)(tb.v)}
-              className={`whitespace-nowrap rounded-md px-3.5 py-1.5 font-display text-sm font-semibold uppercase tracking-wider transition ${sort === tb.v ? 'bg-accent text-black shadow-[0_0_16px_#B6FF2E66]' : 'text-muted hover:text-fg'}`}>
+              className={`whitespace-nowrap rounded-md px-3.5 py-1.5 font-display text-sm font-semibold uppercase tracking-wide transition ${sort === tb.v ? 'bg-accent text-black shadow-[0_0_16px_#B6FF2E66]' : 'text-muted hover:text-fg'}`}>
               {t(tb.k)}
             </button>
           ))}

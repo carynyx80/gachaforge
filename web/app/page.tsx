@@ -7,6 +7,7 @@ import { RecentPulls } from '@/components/RecentPulls';
 import { AboutToRip } from '@/components/AboutToRip';
 import { Board } from '@/components/Board';
 import { LiveRefresh } from '@/components/LiveRefresh';
+import { FeeFlow } from '@/components/live/FeeFlow';
 import { PageLoading } from '@/components/PageLoading';
 
 async function HomeData() {
@@ -17,6 +18,7 @@ async function HomeData() {
     <>
       <Ticker events={activity} />
       <Scoreboard stats={stats} />
+      <FeeFlow />
       <div className="mx-auto grid max-w-7xl gap-8 px-4 pt-16 lg:grid-cols-[1.6fr_1fr]">
         <RecentPulls pulls={pulls} />
         <AboutToRip machines={rip} />

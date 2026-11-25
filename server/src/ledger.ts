@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Bus } from './bus.js';
+import { feeSplit } from './core/packs.js';
 import type { Repository } from './store/repository.js';
-import type { ActivityEvent, ActivityKind, BurnEvent, Machine, Pull, RaffleProof, Stats, Trade } from './types.js';
+import type { ActivityEvent, ActivityKind, BurnEvent, FeeEvent, Machine, Pull, RaffleProof, Stats, Trade } from './types.js';
 
 export const now = () => Math.floor(Date.now() / 1000);
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -70,11 +71,69 @@ export class Ledger {
     return next;
   }
 
-  /** Tax landed in the vault. `potUsd` is the gacha-pot share (POT_SHARE_BPS, 7%; 90% treasury, 3% $FORGE buyback). */
-  async tax(address: string, totalUsd: number, potUsd: number, ts = now()) {
-    const m = await this.updateMachine(address, (m) => ({ potUsd: round2(m.potUsd + potUsd) }));
+  /**
+   * Live fee flow: one trade → FeeEvent (tax × split constants, USD at `bnbUsd`). The pot share is added to the machine's
+   * potUsd right away as an estimate (potUsd = on-chain pot + pending estimate) and broadcast via the `machine` update;
+   * the event itself goes out as `{ type: 'fee' }`. `patch` lets the caller fold other machine changes into the same update.
+   * Returns null for unknown machines or an already-recorded id (indexer replay).
+   */
+  async recordFee(
+    address: string,
+    t: Trade,
+    bnbUsd: number,
+    opts: { id?: string; pending?: boolean; patch?: (m: Machine) => Partial<Machine> } = {},
+  ): Promise<FeeEvent | null> {
+    const m0 = await this.repo.getMachine(address);
+    if (!m0) return null;
+    const split = feeSplit(t.amountBnb * bnbUsd, m0.taxBps);
+    const e: FeeEvent = {
+      id: opts.id ?? `${t.txHash}-${randomUUID().slice(0, 8)}`,
+      machine: m0.address.toLowerCase(),
+      ticker: m0.ticker,
+      side: t.side,
+      trader: t.trader.toLowerCase(),
+      amountBnb: t.amountBnb,
+      txHash: t.txHash,
+      timestamp: t.timestamp,
+      ...split,
+      potAfterUsd: round2(m0.potUsd + split.potUsd),
+      packPriceUsd: m0.packPriceUsd,
+      pending: opts.pending ?? true,
+    };
+    if (!(await this.repo.addFeeEvent(e))) return null;
+    const m = await this.updateMachine(address, (m) => ({ ...opts.patch?.(m), potUsd: round2(m.potUsd + split.potUsd) }));
+    if (m) {
+      e.potAfterUsd = m.potUsd;
+      e.packPriceUsd = m.packPriceUsd;
+    }
+    this.bus.publish({ type: 'fee', data: e });
+    return e;
+  }
+
+  /** Mock mode: mark fee events synced without touching the pot (the simulated pot is already exact). */
+  async settleFees(address: string, upTo: number) {
+    return this.repo.settleFeeEvents(address, upTo);
+  }
+
+  /**
+   * Vault TaxReceived (live): the real pot share has landed. Fee events up to `ts` stop being pending, their estimate is
+   * removed and the real amount added, so potUsd reconciles to the on-chain pot (+ any still-pending estimate).
+   */
+  async taxReceived(address: string, totalUsd: number, potUsd: number, ts = now()) {
+    const settled = await this.repo.settleFeeEvents(address, ts);
+    const estimate = settled.reduce((s, e) => s + e.potUsd, 0);
+    const m = await this.updateMachine(address, (m) => ({ potUsd: round2(Math.max(0, m.potUsd - estimate) + potUsd) }));
     if (m) await this.activity(m, 'TAX', `tax ${usd(potUsd)} → gacha pot`, totalUsd, ts);
     return m;
+  }
+
+  /** Keeper reconcile from vault.pot(): potUsd = on-chain pot + still-pending fee estimate. */
+  async reconcilePot(address: string, onChainPotUsd: number) {
+    const pending = await this.repo.pendingFeePotUsd(address);
+    const target = round2(onChainPotUsd + pending);
+    const m = await this.repo.getMachine(address);
+    if (!m || m.potUsd === target) return m;
+    return this.updateMachine(address, () => ({ potUsd: target }));
   }
 
   async trade(address: string, t: Trade) {

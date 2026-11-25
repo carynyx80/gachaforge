@@ -1,14 +1,39 @@
-import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeTotals, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type HolderRow, type Repository, type RewardsRow } from './repository.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 const ACTIVITY_CAP = 5000;
+/** The simulator emits several fee events per second; keep a bounded window (totals are kept separately). */
+const FEE_CAP = 20_000;
+const BUCKET_S = 60;
+const zeroTotals = (): FeeTotals => ({ totalTaxUsd: 0, flapUsd: 0, platformUsd: 0, potUsd: 0, buybackUsd: 0 });
+const addTotals = (t: FeeTotals, e: FeeEvent) => {
+  t.totalTaxUsd += e.taxUsd;
+  t.flapUsd += e.flapUsd;
+  t.platformUsd += e.platformUsd;
+  t.potUsd += e.potUsd;
+  t.buybackUsd += e.buybackUsd;
+};
+const roundTotals = (t: FeeTotals): FeeTotals => ({
+  totalTaxUsd: r2(t.totalTaxUsd),
+  flapUsd: r2(t.flapUsd),
+  platformUsd: r2(t.platformUsd),
+  potUsd: r2(t.potUsd),
+  buybackUsd: r2(t.buybackUsd),
+});
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export class MemoryRepository implements Repository {
   private machines = new Map<string, Machine>();
   private pulls = new Map<string, Pull>();
   private trades = new Map<string, Trade[]>();
   private activity: ActivityEvent[] = [];
+  private fees: FeeEvent[] = [];
+  private feeIds = new Set<string>();
+  private pendingFees = new Map<string, FeeEvent>();
+  private feeTotals = zeroTotals();
+  /** Per-minute totals for the rolling 24h window. */
+  private feeBuckets = new Map<number, FeeTotals>();
   private burns: BurnEvent[] = [];
   private proofs = new Map<string, RaffleProof>();
   private balances = new Map<string, Map<string, bigint>>();
@@ -54,6 +79,55 @@ export class MemoryRepository implements Repository {
   async listTrades(machine: string, offset: number, limit: number) {
     const all = [...(this.trades.get(lc(machine)) ?? [])].sort((a, b) => b.timestamp - a.timestamp);
     return { items: all.slice(offset, offset + limit), total: all.length };
+  }
+
+  async addFeeEvent(e: FeeEvent) {
+    if (this.feeIds.has(e.id)) return false;
+    const ev = { ...e, machine: lc(e.machine), trader: lc(e.trader) };
+    this.fees.push(ev);
+    this.feeIds.add(ev.id);
+    if (ev.pending) this.pendingFees.set(ev.id, ev);
+    if (this.fees.length > FEE_CAP) for (const old of this.fees.splice(0, this.fees.length - FEE_CAP)) this.feeIds.delete(old.id);
+    addTotals(this.feeTotals, ev);
+    const b = Math.floor(ev.timestamp / BUCKET_S);
+    let bucket = this.feeBuckets.get(b);
+    if (!bucket) this.feeBuckets.set(b, (bucket = zeroTotals()));
+    addTotals(bucket, ev);
+    const horizon = b - Math.ceil(172_800 / BUCKET_S);
+    if (this.feeBuckets.size > 3000) for (const k of this.feeBuckets.keys()) if (k < horizon) this.feeBuckets.delete(k);
+    return true;
+  }
+  async listFeeEvents({ machine, limit }: { machine?: string; limit: number }) {
+    const src = machine ? this.fees.filter((e) => e.machine === lc(machine)) : this.fees;
+    return [...src].reverse().sort((a, b) => b.timestamp - a.timestamp).slice(0, limit).map((e) => ({ ...e }));
+  }
+  async settleFeeEvents(machine: string, upTo: number) {
+    const changed: FeeEvent[] = [];
+    for (const [id, e] of this.pendingFees) {
+      if (e.machine !== lc(machine) || e.timestamp > upTo) continue;
+      e.pending = false;
+      this.pendingFees.delete(id);
+      changed.push({ ...e });
+    }
+    return changed;
+  }
+  async pendingFeePotUsd(machine: string) {
+    let s = 0;
+    for (const e of this.pendingFees.values()) if (e.machine === lc(machine)) s += e.potUsd;
+    return r2(s);
+  }
+  async feeSummary(since: number) {
+    const last = zeroTotals();
+    const from = Math.floor(since / BUCKET_S);
+    for (const [k, t] of this.feeBuckets) {
+      if (k < from) continue;
+      last.totalTaxUsd += t.totalTaxUsd;
+      last.flapUsd += t.flapUsd;
+      last.platformUsd += t.platformUsd;
+      last.potUsd += t.potUsd;
+      last.buybackUsd += t.buybackUsd;
+    }
+    return { ...roundTotals(this.feeTotals), last24h: roundTotals(last) };
   }
 
   async addActivity(e: ActivityEvent) {

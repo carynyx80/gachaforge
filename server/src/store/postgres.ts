@@ -1,11 +1,11 @@
-import { and, asc, count, desc, eq, gt, lte, sql, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, gt, lte, sql, sum } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as s from '../db/schema.js';
-import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeTotals, Machine, Pull, RaffleProof, Trade } from '../types.js';
 import { lc, type Repository } from './repository.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -69,6 +69,67 @@ export class PostgresRepository implements Repository {
     const items = await this.db.select().from(s.trades).where(where).orderBy(desc(s.trades.timestamp)).offset(offset).limit(limit);
     const [{ n }] = await this.db.select({ n: count() }).from(s.trades).where(where);
     return { items: items.map((r) => r.data), total: Number(n) };
+  }
+
+  async addFeeEvent(e: FeeEvent) {
+    const data = { ...e, machine: lc(e.machine), trader: lc(e.trader) };
+    const r = await this.db
+      .insert(s.feeEvents)
+      .values({
+        id: e.id,
+        machine: data.machine,
+        timestamp: e.timestamp,
+        pending: e.pending,
+        taxUsd: e.taxUsd,
+        flapUsd: e.flapUsd,
+        platformUsd: e.platformUsd,
+        potUsd: e.potUsd,
+        buybackUsd: e.buybackUsd,
+        data,
+      })
+      .onConflictDoNothing()
+      .returning({ id: s.feeEvents.id });
+    return r.length > 0;
+  }
+  async listFeeEvents({ machine, limit }: { machine?: string; limit: number }) {
+    const where = machine ? eq(s.feeEvents.machine, lc(machine)) : undefined;
+    const r = await this.db.select({ data: s.feeEvents.data, pending: s.feeEvents.pending }).from(s.feeEvents).where(where).orderBy(desc(s.feeEvents.timestamp)).limit(limit);
+    return r.map((x) => ({ ...x.data, pending: x.pending }));
+  }
+  async settleFeeEvents(machine: string, upTo: number) {
+    const r = await this.db
+      .update(s.feeEvents)
+      .set({ pending: false })
+      .where(and(eq(s.feeEvents.machine, lc(machine)), eq(s.feeEvents.pending, true), lte(s.feeEvents.timestamp, upTo)))
+      .returning({ data: s.feeEvents.data });
+    return r.map((x) => ({ ...x.data, pending: false }));
+  }
+  async pendingFeePotUsd(machine: string) {
+    const [r] = await this.db
+      .select({ v: sum(s.feeEvents.potUsd) })
+      .from(s.feeEvents)
+      .where(and(eq(s.feeEvents.machine, lc(machine)), eq(s.feeEvents.pending, true)));
+    return Math.round(Number(r?.v ?? 0) * 100) / 100;
+  }
+  async feeSummary(since: number) {
+    const recent = gte(s.feeEvents.timestamp, since);
+    const [r] = await this.db
+      .select({
+        tax: sum(s.feeEvents.taxUsd),
+        flap: sum(s.feeEvents.flapUsd),
+        platform: sum(s.feeEvents.platformUsd),
+        pot: sum(s.feeEvents.potUsd),
+        buyback: sum(s.feeEvents.buybackUsd),
+        tax24: sql<string | null>`sum(${s.feeEvents.taxUsd}) filter (where ${recent})`,
+        flap24: sql<string | null>`sum(${s.feeEvents.flapUsd}) filter (where ${recent})`,
+        platform24: sql<string | null>`sum(${s.feeEvents.platformUsd}) filter (where ${recent})`,
+        pot24: sql<string | null>`sum(${s.feeEvents.potUsd}) filter (where ${recent})`,
+        buyback24: sql<string | null>`sum(${s.feeEvents.buybackUsd}) filter (where ${recent})`,
+      })
+      .from(s.feeEvents);
+    const n = (v: unknown) => Math.round(Number(v ?? 0) * 100) / 100;
+    const last24h: FeeTotals = { totalTaxUsd: n(r?.tax24), flapUsd: n(r?.flap24), platformUsd: n(r?.platform24), potUsd: n(r?.pot24), buybackUsd: n(r?.buyback24) };
+    return { totalTaxUsd: n(r?.tax), flapUsd: n(r?.flap), platformUsd: n(r?.platform), potUsd: n(r?.pot), buybackUsd: n(r?.buyback), last24h };
   }
 
   async addActivity(e: ActivityEvent) {

@@ -1,4 +1,4 @@
-import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardRelease, DividendClaim, FeeEvent, FeeSummary, Machine, Page, Pull, RaffleProof, Trade } from '../types.js';
 
 export interface HolderRow {
   address: string;
@@ -30,6 +30,17 @@ export interface Repository {
 
   addTrade(machine: string, t: Trade): Promise<void>;
   listTrades(machine: string, offset: number, limit: number): Promise<Page<Trade>>;
+
+  /** Live fee flow. Returns false when an event with the same id already exists (indexer replays). */
+  addFeeEvent(e: FeeEvent): Promise<boolean>;
+  /** Newest first. */
+  listFeeEvents(opts: { machine?: string; limit: number }): Promise<FeeEvent[]>;
+  /** Marks a machine's pending fee events with timestamp <= upTo as synced; returns the events it changed. */
+  settleFeeEvents(machine: string, upTo: number): Promise<FeeEvent[]>;
+  /** Sum of potUsd over a machine's still-pending fee events (the pot estimate not yet in the vault). */
+  pendingFeePotUsd(machine: string): Promise<number>;
+  /** All-time totals plus totals for events with timestamp >= since. */
+  feeSummary(since: number): Promise<FeeSummary>;
 
   addActivity(e: ActivityEvent): Promise<void>;
   listActivity(limit: number): Promise<ActivityEvent[]>;

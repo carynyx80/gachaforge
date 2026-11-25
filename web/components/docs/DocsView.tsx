@@ -13,7 +13,7 @@ const STRATS = Object.keys(STRATEGY_INFO) as Strategy[];
 
 function H({ id, n, children }: { id: string; n: number; children: ReactNode }) {
   return (
-    <h2 id={id} className="scroll-mt-28 font-display text-2xl font-bold uppercase tracking-wide sm:text-3xl">
+    <h2 id={id} className="scroll-mt-28 font-display text-xl font-extrabold uppercase tracking-tight sm:text-[1.65rem]">
       <span className="mr-3 font-mono text-base text-accent">{String(n).padStart(2, '0')}</span>{children}
     </h2>
   );
@@ -98,7 +98,7 @@ export default function DocsView({ addresses }: { addresses: DocAddress[] }) {
       <article className="min-w-0 space-y-16 leading-relaxed text-fg/90">
         <header className="space-y-3">
           <div className="text-xs font-semibold uppercase tracking-[0.3em] text-accent">{d.kicker}</div>
-          <h1 className="font-display text-4xl font-bold uppercase sm:text-5xl">{d.title}</h1>
+          <h1 className="font-display text-3xl font-extrabold uppercase sm:text-[2.6rem]">{d.title}</h1>
           <p className="max-w-3xl text-muted">{d.lead}</p>
           <div className="flex gap-3 rounded-lg border border-accent/40 bg-accent-soft p-3 text-sm"><span className="text-accent">●</span><span>{d.preview}</span></div>
         </header>

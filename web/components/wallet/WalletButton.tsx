@@ -26,7 +26,7 @@ export function WalletButton({ label }: { label: string }) {
 
   if (!w.connected || !w.address) {
     return (
-      <button className="btn-chunky px-4 py-2 text-sm" onClick={w.openConnect} disabled={w.connecting} aria-busy={w.connecting}>
+      <button className="btn-chunky px-2.5 py-1.5 text-[11px] sm:px-4 sm:py-2 sm:text-sm" onClick={w.openConnect} disabled={w.connecting} aria-busy={w.connecting}>
         {w.connecting ? '…' : label}
       </button>
     );

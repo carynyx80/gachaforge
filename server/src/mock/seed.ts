@@ -1,12 +1,12 @@
 import { keccak256, parseEther, stringToHex, type Hex } from 'viem';
-import { PACK_PRICE_USD, splitTax, TAX_BPS, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
+import { feeSplit, PACK_PRICE_USD, TAX_BPS, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
 import { excludedFor } from '../indexer/excluded.js';
 import { now, round2, type Ledger } from '../ledger.js';
 import type { Logger } from '../log.js';
 import { planDividend, planPull } from '../operator/settle.js';
 import { mulberry32, randomCard, type Rng } from '../renaiss/simulated.js';
 import { toCard } from '../renaiss/types.js';
-import type { BurnEvent, Machine, PackId, Pull, Strategy, Trade } from '../types.js';
+import type { BurnEvent, FeeEvent, Machine, PackId, Pull, Strategy, Trade } from '../types.js';
 
 /** Wallet that holds an eligible bag in every mock machine — handy for testing the rewards UI. */
 export const DEMO_WALLET = '0x00000000000000000000000000000000000d3e70';
@@ -141,21 +141,28 @@ export async function seedMock(ledger: Ledger, opts: { bnbUsd: number; excluded:
 }
 
 /**
- * Live trades are scaled up: the pot only gets 7% of a 2% tax (0.14% of volume), so ~1.2 BNB avg
- * trades at ~0.67 trades/s give roughly one pull every 30–60s across all machines.
+ * Simulated live trades are sized in USD so the cadence doesn't depend on BNB_USD_PRICE: ~$200 avg (12 + U²·560).
+ * The pot gets 7% of the 90% left after flap.sh's 10% cut of a 2% tax (0.126% of volume): ≈ $0.25/trade.
+ * At ~5 trades/s (default SIM_INTERVAL_MS=400, 1–3 trades/tick) that's ≈ $75/min into pots → roughly one pull
+ * every ~45s (30–90s) across all machines, while hot machines' meters move every second or so.
  */
-const SIM_TRADE_SCALE = 2;
+const simTradeUsd = (rng: Rng) => 12 + rng() ** 2 * 560;
+/** Share of simulated trades that go to the "hot" machines. */
+const HOT_SHARE = 0.45;
+const HOT_COUNT = 3;
+/** Mock fee events flip pending → false after this long, mimicking dispatch + vault sync. */
+export const MOCK_SYNC_MS = 10_000;
 
-function mockTrade(ctx: MockContext, m: Machine, ts: number, scale = 1): Trade {
+function mockTrade(ctx: MockContext, m: Machine, ts: number, live = false): Trade {
   const { rng } = ctx;
-  const amountBnb = round4((0.01 + rng() ** 2 * 3) * scale);
+  const amountBnb = round4(live ? simTradeUsd(rng) / ctx.bnbUsd : 0.01 + rng() ** 2 * 3);
   const priceUsdPerToken = m.marketCapUsd / 1e9;
   return {
     side: rng() < 0.58 ? 'BUY' : 'SELL',
     trader: addrFrom(rng),
     amountBnb,
     tokens: round2((amountBnb * ctx.bnbUsd) / Math.max(priceUsdPerToken, 1e-9)),
-    taxUsd: round2(((amountBnb * m.taxBps) / 10_000) * ctx.bnbUsd),
+    taxUsd: feeSplit(amountBnb * ctx.bnbUsd, m.taxBps).taxUsd,
     txHash: txFrom(rng),
     timestamp: ts,
   };
@@ -235,43 +242,90 @@ export async function simulatePull(ctx: MockContext, address: string, ts = now()
   return pull;
 }
 
-/** Live simulator: trades → tax → pot; pulls fire when pot >= pack price. */
+/**
+ * One simulated live trade on `address`: trade row, balance drift, FeeEvent (pot += exactly fee.potUsd, broadcast as
+ * `fee` + `machine`), and a pull when the pot reaches the pack price (simulatePull keeps the remainder).
+ */
+export async function simulateTrade(ctx: MockContext, address: string, ts = now()): Promise<{ fee: FeeEvent; pull: Pull | null } | null> {
+  const { rng, ledger } = ctx;
+  const m = await ledger.repo.getMachine(address);
+  if (!m) return null;
+  const t = mockTrade(ctx, m, ts, true);
+  await ledger.trade(m.address, t);
+  // move some balance so holder counts / odds drift
+  const tokensBase = BigInt(Math.floor(t.tokens)) * E18;
+  const pool = JSON.parse((await ledger.repo.getMeta(`pools:${m.address}`)) ?? '[]')[0] as string;
+  if (pool && t.side === 'BUY') await ledger.repo.applyTransfer(m.address, pool, t.trader, tokensBase);
+  await refreshCounts(ctx, m.address);
+  const drift = 1 + (rng() - 0.48) * 0.04;
+  const curveStep = rng() * 0.8;
+  const fee = await ledger.recordFee(m.address, t, ctx.bnbUsd, {
+    pending: true,
+    patch: (cur) => {
+      const curve = cur.stage === 'CURVE' ? Math.min(100, round2(cur.bondingCurvePct + curveStep)) : 100;
+      return {
+        marketCapUsd: round2(cur.marketCapUsd * drift),
+        change24hPct: round2(cur.change24hPct + (drift - 1) * 100),
+        volume24hUsd: round2(cur.volume24hUsd + t.amountBnb * ctx.bnbUsd),
+        bondingCurvePct: curve,
+        stage: curve >= 100 ? 'GRADUATED' : cur.stage,
+      };
+    },
+  });
+  if (!fee) return null;
+  // Keep the ticker readable: the per-trade feed is the `fee` stream; only some trades also get a TAX activity line.
+  if (rng() < 0.06) await ledger.activity(m, 'TAX', `tax $${fee.taxUsd.toFixed(2)} → $${fee.potUsd.toFixed(2)} gacha pot`, fee.taxUsd, ts);
+  if (rng() < 0.01) {
+    // a buyback batches many taxes
+    await ledger.burn({ id: `sim-buyback-${fee.id}`, kind: 'BUYBACK', amount: round2(10_000 + rng() * 400_000), txHash: txFrom(rng), timestamp: ts }, round2(fee.buybackUsd * 100));
+  }
+  const pull = fee.potAfterUsd >= fee.packPriceUsd ? await simulatePull(ctx, m.address) : null;
+  return { fee, pull };
+}
+
+/** Picks the simulator's "hot" machines (deterministic for a given rng). */
+function pickHot(ctx: MockContext, machines: Machine[]): string[] {
+  const pool = [...machines].sort((a, b) => a.address.localeCompare(b.address));
+  const hot: string[] = [];
+  while (hot.length < Math.min(HOT_COUNT, pool.length)) hot.push(pool.splice(Math.floor(ctx.rng() * pool.length), 1)[0].address);
+  return hot;
+}
+
+/** Live simulator: several trades/s (biased to a few hot machines) → fee events → pots; pulls fire when pot >= pack price. */
 export function startSimulator(ctx: MockContext, intervalMs: number, log?: Logger) {
   const { rng, ledger } = ctx;
+  let hot: string[] | null = null;
+  let busy = false;
+  const syncTimers = new Set<NodeJS.Timeout>();
   const tick = async () => {
-    const machines = await ledger.repo.listMachines();
-    const burst = int(rng, 1, 3);
-    for (let i = 0; i < burst; i++) {
-      const m = machines[Math.floor(rng() * machines.length)];
-      const t = mockTrade(ctx, m, now(), SIM_TRADE_SCALE);
-      await ledger.trade(m.address, t);
-      // move some balance so holder counts / odds drift
-      const tokensBase = BigInt(Math.floor(t.tokens)) * E18;
-      const pool = JSON.parse((await ledger.repo.getMeta(`pools:${m.address}`)) ?? '[]')[0] as string;
-      if (pool) await (t.side === 'BUY' ? ledger.repo.applyTransfer(m.address, pool, t.trader, tokensBase) : ledger.repo.applyTransfer(m.address, t.trader, pool, 0n));
-      const taxUsd = t.taxUsd;
-      const share = splitTax(taxUsd);
-      const potShare = round2(share.pot);
-      const drift = 1 + (rng() - 0.48) * 0.04;
-      const curve = m.stage === 'CURVE' ? Math.min(100, round2(m.bondingCurvePct + rng() * 0.8)) : 100;
-      await ledger.repo.upsertMachine({
-        ...m,
-        marketCapUsd: round2(m.marketCapUsd * drift),
-        change24hPct: round2(m.change24hPct + (drift - 1) * 100),
-        volume24hUsd: round2(m.volume24hUsd + t.amountBnb * ctx.bnbUsd),
-        bondingCurvePct: curve,
-        stage: curve >= 100 ? 'GRADUATED' : m.stage,
-      });
-      await refreshCounts(ctx, m.address);
-      const updated = await ledger.tax(m.address, taxUsd, potShare);
-      if (rng() < 0.08) {
-        await ledger.burn({ id: `sim-buyback-${Date.now()}-${i}`, kind: 'BUYBACK', amount: round2(10_000 + rng() * 400_000), txHash: txFrom(rng), timestamp: now() }, round2(share.buyback * 20)); // buyback batches several taxes
+    if (busy) return; // never overlap ticks (they read-modify-write machines)
+    busy = true;
+    try {
+      const machines = await ledger.repo.listMachines();
+      if (!machines.length) return;
+      hot ??= pickHot(ctx, machines);
+      const burst = int(rng, 1, 3);
+      for (let i = 0; i < burst; i++) {
+        const address = rng() < HOT_SHARE ? hot[Math.floor(rng() * hot.length)] : machines[Math.floor(rng() * machines.length)].address;
+        const r = await simulateTrade(ctx, address);
+        if (!r) continue;
+        const t = setTimeout(() => {
+          syncTimers.delete(t);
+          void ledger.settleFees(r.fee.machine, r.fee.timestamp).catch((err) => log?.error({ err }, 'mock fee sync failed'));
+        }, MOCK_SYNC_MS);
+        t.unref?.();
+        syncTimers.add(t);
       }
-      if (updated && updated.potUsd >= updated.packPriceUsd) await simulatePull(ctx, m.address);
+    } finally {
+      busy = false;
     }
   };
   const timer = setInterval(() => void tick().catch((err) => log?.error({ err }, 'simulator tick failed')), intervalMs);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    for (const t of syncTimers) clearTimeout(t);
+    syncTimers.clear();
+  };
 }
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;

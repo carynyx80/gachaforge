@@ -7,7 +7,7 @@ import type { Logger } from '../log.js';
 
 /**
  * Periodic keeper:
- *  - reconciles potUsd from vault.pot()
+ *  - reconciles potUsd from vault.pot() (+ the still-pending fee estimate, see Ledger.reconcilePot)
  *  - reconciles stage/progress/pool from Portal.getTokenV8Safe
  *  - post-graduation, pokes the flap.sh tax processor's permissionless dispatch()
  *    when it holds pending tax for our vault (marketQuoteBalance > 0), so the pot updates.
@@ -43,7 +43,7 @@ export class Keeper {
       // reconcile pot with the vault's on-chain bucket
       await pc
         .readContract({ address: m.vault as Hex, abi: vaultAbi, functionName: 'pot' })
-        .then((pot) => this.ledger.updateMachine(m.address, () => ({ potUsd: Math.round((Number(pot as bigint) / 1e18) * this.bnbUsd * 100) / 100 })))
+        .then((pot) => this.ledger.reconcilePot(m.address, (Number(pot as bigint) / 1e18) * this.bnbUsd))
         .catch((err) => this.log.debug({ err, vault: m.vault }, 'pot() read failed'));
       const fresh = await this.ledger.repo.getMachine(m.address);
       if (fresh?.stage !== 'GRADUATED' || !this.chain.walletClient) continue;

@@ -20,7 +20,7 @@ export function Wordmark() {
   return (
     <span className="flex items-center gap-2">
       <LogoMark />
-      <span className="font-display text-xl font-bold tracking-wide">
+      <span className="font-display text-[15px] font-extrabold tracking-tight sm:text-xl">
         GACHA<span className="text-accent">FORGE</span>
       </span>
     </span>

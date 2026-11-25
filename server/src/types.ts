@@ -137,8 +137,50 @@ export interface DividendClaim {
   pushed: boolean;
 }
 
+/** One trade's 2% tax and how it splits (SPEC "Live fee flow"). All amounts USD. */
+export interface FeeEvent {
+  id: string;
+  machine: string;
+  ticker: string;
+  side: 'BUY' | 'SELL';
+  trader: string;
+  amountBnb: number;
+  txHash: string;
+  timestamp: number;
+  /** 2% of the trade */
+  taxUsd: number;
+  /** flap.sh's cut (~10% of tax) */
+  flapUsd: number;
+  /** 90% of the rest -> company wallet */
+  platformUsd: number;
+  /** 7% of the rest -> this machine's gacha pot */
+  potUsd: number;
+  /** 3% of the rest -> $FORGE buyback */
+  buybackUsd: number;
+  /** machine pot incl. this trade (estimate until vault sync) */
+  potAfterUsd: number;
+  /** next pack price for this machine */
+  packPriceUsd: number;
+  /** true until the tax has been dispatched + synced into the vault on-chain */
+  pending: boolean;
+}
+
+export interface FeeTotals {
+  totalTaxUsd: number;
+  flapUsd: number;
+  platformUsd: number;
+  potUsd: number;
+  buybackUsd: number;
+}
+
+/** GET /api/fees/summary */
+export interface FeeSummary extends FeeTotals {
+  last24h: FeeTotals;
+}
+
 export type WsMessage =
   | { type: 'activity'; data: ActivityEvent }
+  | { type: 'fee'; data: FeeEvent }
   | { type: 'pull'; data: Pull }
   | { type: 'stats'; data: Stats }
   | { type: 'machine'; data: Machine };

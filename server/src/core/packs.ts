@@ -17,6 +17,31 @@ export const TAX_BPS = 200;
 export const TREASURY_SHARE_BPS = 9_000;
 export const POT_SHARE_BPS = 700;
 export const BUYBACK_SHARE_BPS = 300; // $FORGE buyback & burn
+/** flap.sh keeps ~10% of the tax (≈0.2% of a trade at 2%) before the rest reaches the vault. */
+export const FLAP_CUT_BPS = 1000;
+
+export interface FeeSplit {
+  taxUsd: number;
+  flapUsd: number;
+  platformUsd: number;
+  potUsd: number;
+  buybackUsd: number;
+}
+
+const cents = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Splits one trade's tax (USD, cent precision): tax = trade × taxBps; flap.sh takes FLAP_CUT_BPS of it; the rest is split
+ * pot / buyback / treasury by the vault shares. Platform (treasury) absorbs rounding so the parts sum to taxUsd.
+ */
+export function feeSplit(tradeUsd: number, taxBps = TAX_BPS): FeeSplit {
+  const taxUsd = cents((tradeUsd * taxBps) / 10_000);
+  const flapUsd = cents((taxUsd * FLAP_CUT_BPS) / 10_000);
+  const rest = taxUsd - flapUsd;
+  const potUsd = cents((rest * POT_SHARE_BPS) / 10_000);
+  const buybackUsd = cents((rest * BUYBACK_SHARE_BPS) / 10_000);
+  return { taxUsd, flapUsd, platformUsd: cents(taxUsd - flapUsd - potUsd - buybackUsd), potUsd, buybackUsd };
+}
 
 export interface TaxSplit {
   pot: number;

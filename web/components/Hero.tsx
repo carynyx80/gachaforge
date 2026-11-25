@@ -11,10 +11,10 @@ export function Hero() {
       <div className="grid-floor pointer-events-none absolute inset-x-0 bottom-0 h-[55%]" />
       <div className="relative mx-auto grid max-w-7xl items-center gap-8 px-4 pb-16 pt-12 md:grid-cols-[1.2fr_1fr] md:pb-24 md:pt-20">
         <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent-soft px-3 py-1 text-xs font-semibold uppercase tracking-widest text-glow">
+          <span className="inline-flex items-center gap-2 rounded-sm border-2 border-accent/50 bg-accent-soft px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider text-glow">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> {t('hero_kicker')}
           </span>
-          <h1 className="mt-5 font-display text-5xl font-bold leading-[0.95] tracking-tight sm:text-6xl lg:text-7xl">
+          <h1 className="mt-5 font-display text-[2.5rem] font-black leading-[1.02] tracking-[-0.02em] sm:text-5xl lg:text-6xl">
             <span className="block">{t('hero_title_1')}</span>
             <span className="neon-text block text-accent">{t('hero_title_2')}</span>
           </h1>

@@ -1,5 +1,5 @@
 import { bigint, boolean, doublePrecision, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text } from 'drizzle-orm/pg-core';
-import type { ActivityEvent, BurnEvent, CardReleaseStatus, Machine, Pull, RaffleProof, Trade } from '../types.js';
+import type { ActivityEvent, BurnEvent, CardReleaseStatus, FeeEvent, Machine, Pull, RaffleProof, Trade } from '../types.js';
 
 export const machines = pgTable('machines', {
   address: text('address').primaryKey(),
@@ -119,4 +119,21 @@ export const cardReleases = pgTable(
     updatedAt: bigint('updated_at', { mode: 'number' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.pullKey, t.tokenId] }), index('card_releases_due_idx').on(t.status, t.nextAttemptAt), index('card_releases_winner_idx').on(t.winner)],
+);
+
+export const feeEvents = pgTable(
+  'fee_events',
+  {
+    id: text('id').primaryKey(),
+    machine: text('machine').notNull(),
+    timestamp: bigint('timestamp', { mode: 'number' }).notNull(),
+    pending: boolean('pending').notNull(),
+    taxUsd: doublePrecision('tax_usd').notNull(),
+    flapUsd: doublePrecision('flap_usd').notNull(),
+    platformUsd: doublePrecision('platform_usd').notNull(),
+    potUsd: doublePrecision('pot_usd').notNull(),
+    buybackUsd: doublePrecision('buyback_usd').notNull(),
+    data: jsonb('data').$type<FeeEvent>().notNull(),
+  },
+  (t) => [index('fee_events_ts_idx').on(t.timestamp), index('fee_events_machine_ts_idx').on(t.machine, t.timestamp), index('fee_events_machine_pending_idx').on(t.machine, t.pending)],
 );

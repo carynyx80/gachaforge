@@ -66,7 +66,8 @@ describe('Indexer', () => {
 
     const m = (await repo.getMachine(TOKEN))!;
     expect(m).toMatchObject({ ticker: 'TEST', pack: 'FORGE_48', strategy: 'DIVIDEND', taxBps: 200, stage: 'GRADUATED', bondingCurvePct: 100, packsOpened: 1, holders: 1, eligibleHolders: 1, burnedTokens: 5000 });
-    expect(m.potUsd).toBeCloseTo(42 - 30 + 3, 5); // tax 0.07 → pot, pull spends 0.05, refund 0.005
+    // tax 0.07 → pot, pull spends 0.05, refund 0.005, + pending estimate of the later 1 BNB buy ($12 tax → $0.76 pot)
+    expect(m.potUsd).toBeCloseTo(42 - 30 + 3 + 0.76, 5);
     expect(m.paidToHoldersBnb).toBeCloseTo(0.06, 6);
     expect((await repo.listTrades(TOKEN, 0, 10)).items[0]).toMatchObject({ side: 'BUY', amountBnb: 1, taxUsd: 12 });
     expect((await repo.listTrades('0x0000000000000000000000000000000000000bad', 0, 10)).total).toBe(0);

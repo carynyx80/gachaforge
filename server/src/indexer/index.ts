@@ -3,7 +3,7 @@ import { buybackBurnerAbi, factoryAbi, portalAbi, tokenAbi, vaultAbi, vaultPorta
 import type { ChainCtx } from '../chain.js';
 import type { Config } from '../config.js';
 import { selectEligible } from '../core/snapshot.js';
-import { PACK_BY_INDEX, PACK_PRICE_USD, STRATEGY_BY_INDEX, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
+import { feeSplit, PACK_BY_INDEX, PACK_PRICE_USD, STRATEGY_BY_INDEX, TOTAL_SUPPLY_DEFAULT } from '../core/packs.js';
 import { now, round2, type Ledger } from '../ledger.js';
 import type { Logger } from '../log.js';
 import type { Machine, Pull } from '../types.js';
@@ -177,7 +177,7 @@ export class Indexer {
       const id = `${token}-${a.pullId}`;
       switch (l.eventName) {
         case 'TaxReceived':
-          await this.ledger.tax(token, bnb(a.amount) * px, bnb(a.toPot) * px, ts);
+          await this.ledger.taxReceived(token, bnb(a.amount) * px, bnb(a.toPot) * px, ts);
           return;
         case 'PullOpened':
           await this.ledger.updateMachine(token, (m) => ({ round: Number(a.pullId), potUsd: round2(Math.max(0, m.potUsd - bnb(a.amountSent) * px)) }));
@@ -262,21 +262,24 @@ export class Indexer {
         if (!m) return;
         const eth = bnb(a.eth);
         const side = l.eventName === 'TokenBought' ? 'BUY' : 'SELL';
-        await this.ledger.trade(subject, {
+        const trade = {
           side,
           trader: lc(side === 'BUY' ? a.buyer : a.seller),
           amountBnb: eth,
           tokens: bnb(a.amount),
-          taxUsd: round2(((eth * m.taxBps) / 10_000) * px),
+          taxUsd: feeSplit(eth * px, m.taxBps).taxUsd,
           txHash: tx,
           timestamp: Number(a.ts) || ts,
-        });
+        } as const;
+        await this.ledger.trade(subject, trade);
         // TODO: proper rolling 24h volume/change windows; postPrice is quote-wei per token-wei*1e18 [UNVERIFIED scale]
         const priceBnb = bnb(a.postPrice);
-        await this.ledger.updateMachine(subject, (m) => ({
-          volume24hUsd: round2(m.volume24hUsd + eth * px),
-          marketCapUsd: round2(priceBnb * 1e9 * px),
-        }));
+        // Fee event + pot estimate (pending until the vault's TaxReceived), folded into one machine update.
+        await this.ledger.recordFee(subject, trade, px, {
+          id: `${tx}-${l.logIndex}`,
+          pending: true,
+          patch: (m) => ({ volume24hUsd: round2(m.volume24hUsd + eth * px), marketCapUsd: round2(priceBnb * 1e9 * px) }),
+        });
         return;
       }
       case 'FlapTokenProgressChanged':

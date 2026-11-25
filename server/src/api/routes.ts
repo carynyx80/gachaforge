@@ -20,6 +20,10 @@ const machinesQuery = z.object({
 });
 const pageQuery = z.object({ page, pageSize: pageSize.default(20) });
 const limitQuery = (d: number, max: number) => z.object({ limit: z.coerce.number().int().min(1).max(max).default(d) });
+const feesQuery = z.object({
+  machine: z.preprocess(emptyToUndef, address.optional()),
+  limit: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(100).default(30)),
+});
 
 /** Unit helper: base units (18 decimals) → whole tokens with 2dp. */
 const units = (b: bigint) => Number(b / 10n ** 16n) / 100;
@@ -132,6 +136,15 @@ export async function registerRoutes(
     if (!q.success) return bad(reply, q.error);
     return repo.listActivity(q.data.limit);
   });
+
+  // Live fee flow (SPEC): newest first.
+  app.get('/api/fees/recent', async (req, reply) => {
+    const q = feesQuery.safeParse(req.query);
+    if (!q.success) return bad(reply, q.error);
+    return repo.listFeeEvents({ machine: q.data.machine?.toLowerCase(), limit: q.data.limit });
+  });
+
+  app.get('/api/fees/summary', async () => repo.feeSummary(Math.floor(Date.now() / 1000) - 86_400));
 
   app.get('/api/burns', async (req, reply) => {
     const q = pageQuery.safeParse(req.query);

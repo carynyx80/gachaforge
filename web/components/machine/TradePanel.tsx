@@ -89,7 +89,7 @@ export function TradePanel({ m }: { m: Machine }) {
     <div className="panel p-4">
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-bg p-1">
         {(['BUY', 'SELL'] as const).map((s) => (
-          <button key={s} onClick={() => { setSide(s); setAmt(s === 'BUY' ? '0.1' : ''); tx.reset(); }} className={`rounded-md py-2 font-display font-bold tracking-wider ${side === s ? (s === 'BUY' ? 'bg-success text-black' : 'bg-danger text-black') : 'text-muted'}`}>{s}</button>
+          <button key={s} onClick={() => { setSide(s); setAmt(s === 'BUY' ? '0.1' : ''); tx.reset(); }} className={`rounded-md py-2 font-display font-bold tracking-wide ${side === s ? (s === 'BUY' ? 'bg-success text-black' : 'bg-danger text-black') : 'text-muted'}`}>{s}</button>
         ))}
       </div>
       <div className="mt-4 flex justify-between text-xs text-muted">
